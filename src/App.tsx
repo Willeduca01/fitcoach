@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppDataProvider } from './context/AppDataContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -41,7 +41,7 @@ export const AppContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ThemeProvider>
         <AppDataProvider>
           <AuthProvider>
@@ -49,7 +49,7 @@ export const App: React.FC = () => {
           </AuthProvider>
         </AppDataProvider>
       </ThemeProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 };
 
