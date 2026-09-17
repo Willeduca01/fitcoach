@@ -70,6 +70,50 @@ function emailServerPlugin(): Plugin {
           return;
         }
 
+        // Middleware de Rate Limiting por IP local
+        if (url === '/api/rate-limit' || url === '/fitcoach/api/rate-limit') {
+          const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1')
+            .toString()
+            .replace(/^::ffff:/, '')
+            .split(',')[0]
+            .trim();
+
+          if (req.method === 'GET') {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ip: clientIp, timestamp: Date.now() }));
+            return;
+          }
+
+          if (req.method === 'POST') {
+            let bodyStr = '';
+            req.on('data', (chunk) => {
+              bodyStr += chunk;
+            });
+            req.on('end', () => {
+              try {
+                const body = JSON.parse(bodyStr || '{}');
+                const { action = 'LOGIN', op = 'check' } = body;
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  ip: clientIp,
+                  allowed: true,
+                  remainingAttempts: 5,
+                  lockoutSeconds: 0,
+                  action,
+                  op,
+                }));
+              } catch {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'JSON inválido' }));
+              }
+            });
+            return;
+          }
+        }
+
         next();
       });
     },

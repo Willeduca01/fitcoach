@@ -2,7 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { sendPasswordResetEmail as sendResendResetEmail } from '../services/emailService';
-import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
+import {
+  checkRateLimit,
+  recordAttempt,
+  syncServerRateLimit,
+  subscribeToRateLimit,
+  formatSecondsToTime
+} from '../lib/rateLimiter';
 import {
   Dumbbell,
   Mail,
@@ -27,12 +33,27 @@ export const ForgotPasswordPage: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
-  // Monitora bloqueio de rate limit
+  // Monitora bloqueio de rate limit (IP, Dispositivo e E-mail)
   useEffect(() => {
-    const status = checkRateLimit('EMAIL_SEND', email || 'global');
-    if (!status.allowed) {
-      setLockoutSeconds(status.lockoutSeconds);
-    }
+    const updateLockout = () => {
+      const status = checkRateLimit('EMAIL_SEND', email);
+      if (!status.allowed) {
+        setLockoutSeconds(status.lockoutSeconds);
+      } else {
+        setLockoutSeconds(0);
+      }
+    };
+
+    updateLockout();
+
+    syncServerRateLimit('EMAIL_SEND', email).then((serverStatus) => {
+      if (!serverStatus.allowed) {
+        setLockoutSeconds(serverStatus.lockoutSeconds);
+      }
+    });
+
+    const unsubscribe = subscribeToRateLimit(updateLockout);
+    return () => unsubscribe();
   }, [email]);
 
   // Contador regressivo caso bloqueado
@@ -57,11 +78,18 @@ export const ForgotPasswordPage: React.FC = () => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Verificação de Rate Limit
+    // Verificação de Rate Limit (IP + Dispositivo)
     const rateCheck = checkRateLimit('EMAIL_SEND', cleanEmail);
     if (!rateCheck.allowed) {
       setLockoutSeconds(rateCheck.lockoutSeconds);
-      setErrorMessage(`Muitas solicitações recentes. Por segurança, aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)}.`);
+      setErrorMessage(`Muitas solicitações recentes neste IP ou dispositivo. Aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)}.`);
+      return;
+    }
+
+    const serverCheck = await syncServerRateLimit('EMAIL_SEND', cleanEmail);
+    if (!serverCheck.allowed) {
+      setLockoutSeconds(serverCheck.lockoutSeconds);
+      setErrorMessage(`Limite de solicitações atingido para este IP. Aguarde ${formatSecondsToTime(serverCheck.lockoutSeconds)}.`);
       return;
     }
 

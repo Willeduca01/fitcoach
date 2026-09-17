@@ -3,7 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { MasterInviteModal } from '../components/common/MasterInviteModal';
-import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
+import {
+  checkRateLimit,
+  recordAttempt,
+  syncServerRateLimit,
+  subscribeToRateLimit,
+  formatSecondsToTime
+} from '../lib/rateLimiter';
 import {
   Dumbbell,
   ShieldCheck,
@@ -41,12 +47,30 @@ export const LoginPage: React.FC = () => {
   const [showDemoAccess, setShowDemoAccess] = useState(false);
   const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
 
-  // Monitorar se há bloqueio ativo por rate limiting
+  // Monitorar se há bloqueio ativo por rate limiting (IP, Dispositivo e E-mail)
   useEffect(() => {
-    const status = checkRateLimit('LOGIN', email || 'global');
-    if (!status.allowed) {
-      setLockoutSeconds(status.lockoutSeconds);
-    }
+    const updateLockout = () => {
+      const status = checkRateLimit('LOGIN', email);
+      if (!status.allowed) {
+        setLockoutSeconds(status.lockoutSeconds);
+      } else {
+        setLockoutSeconds(0);
+      }
+    };
+
+    // Checa imediatamente ao carregar a página (F5)
+    updateLockout();
+
+    // Sincroniza com o servidor em background para checar bloqueio por IP real
+    syncServerRateLimit('LOGIN', email).then((serverStatus) => {
+      if (!serverStatus.allowed) {
+        setLockoutSeconds(serverStatus.lockoutSeconds);
+      }
+    });
+
+    // Assina eventos de atualização de rate limit (ex: mudança em outra aba ou IP resolvido)
+    const unsubscribe = subscribeToRateLimit(updateLockout);
+    return () => unsubscribe();
   }, [email]);
 
   // Contador regressivo em tempo real durante o bloqueio
@@ -74,11 +98,19 @@ export const LoginPage: React.FC = () => {
       cleanEmail = 'teste@fitcoach.com.br';
     }
 
-    // 1. Verificação estrita de Rate Limit antes de processar
+    // 1. Verificação estrita de Rate Limit local (IP + Dispositivo) antes de processar
     const rateCheck = checkRateLimit('LOGIN', cleanEmail);
     if (!rateCheck.allowed) {
       setLockoutSeconds(rateCheck.lockoutSeconds);
-      setErrorMessage(`Muitas tentativas falhas. Por segurança, aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)}.`);
+      setErrorMessage(`Muitas tentativas falhas neste IP ou dispositivo. Por segurança, aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)}.`);
+      return;
+    }
+
+    // 2. Verificação no servidor por IP real
+    const serverRateCheck = await syncServerRateLimit('LOGIN', cleanEmail);
+    if (!serverRateCheck.allowed) {
+      setLockoutSeconds(serverRateCheck.lockoutSeconds);
+      setErrorMessage(`Acesso temporariamente bloqueado para este endereço IP. Aguarde ${formatSecondsToTime(serverRateCheck.lockoutSeconds)}.`);
       return;
     }
 
