@@ -11,7 +11,7 @@ interface AuthContextType {
   loading: boolean;
   loginAsPersonal: () => void;
   loginAsStudent: (studentId: string) => void;
-  loginWithPassword: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithPassword: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
   signUpWithInviteCode: (params: {
     email: string;
     password: string;
@@ -89,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // Busca perfil no banco para definir a Role correta
-  const syncUserProfile = async (userId: string) => {
+  const syncUserProfile = async (userId: string): Promise<UserRole | null> => {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -100,6 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error && profile) {
         const userRole = profile.role as UserRole;
         setRole(userRole);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ role: userRole, currentStudentId: null }));
 
         if (userRole === 'STUDENT') {
           // Busca o id do estudante na tabela students
@@ -111,11 +112,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (studentRecord) {
             setCurrentStudentId(studentRecord.id);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ role: userRole, currentStudentId: studentRecord.id }));
           }
         }
+        return userRole;
       }
+      return null;
     } catch (err) {
       console.warn('[AuthContext] Erro ao sincronizar perfil:', err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -130,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [role, currentStudentId]);
 
   // Login com E-mail e Senha oficial do Supabase
-  const loginWithPassword = async (email: string, password: string) => {
+  const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; role?: UserRole; error?: string }> => {
     try {
       setLoading(true);
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -143,11 +148,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: error.message };
       }
 
+      let detectedRole: UserRole | null = null;
       if (data.user) {
-        await syncUserProfile(data.user.id);
+        detectedRole = await syncUserProfile(data.user.id);
       }
 
-      return { success: true };
+      return { success: true, role: detectedRole || undefined };
     } catch (err: any) {
       setLoading(false);
       return { success: false, error: err.message || 'Erro inesperado ao realizar login.' };

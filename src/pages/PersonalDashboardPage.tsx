@@ -17,9 +17,12 @@ export const PersonalDashboardPage: React.FC = () => {
   const [chatStudentId, setChatStudentId] = useState<string | undefined>(undefined);
 
   // Proteção de rota por papel (RBAC):
-  // Se for aluno, não pode acessar o painel administrativo do personal!
   if (role === 'STUDENT') {
     return <Navigate to="/portal-aluno" replace />;
+  }
+
+  if (role === 'MASTER') {
+    return <Navigate to="/master" replace />;
   }
 
   if (!role) {

@@ -53,8 +53,11 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // Redireciona com base no papel
-      if (role === 'STUDENT') {
+      // Redireciona com base no papel detectado
+      const targetRole = result.role || role;
+      if (targetRole === 'MASTER') {
+        navigate('/master');
+      } else if (targetRole === 'STUDENT') {
         navigate('/portal-aluno');
       } else {
         navigate('/dashboard');
