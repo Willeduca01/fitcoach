@@ -1,4 +1,5 @@
 import { InviteEmailData, generateInviteEmailHtml } from '../lib/emailTemplates';
+import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
 
 export interface SendInviteResult {
   success: boolean;
@@ -8,9 +9,18 @@ export interface SendInviteResult {
 }
 
 /**
- * Dispara o e-mail de convite para a API segura (Resend)
+ * Dispara o e-mail de convite para a API segura (Resend) com proteção de Rate Limit
  */
 export async function sendInviteEmail(data: InviteEmailData): Promise<SendInviteResult> {
+  // Verificação de Rate Limit para prevenir spam de disparos
+  const rateCheck = checkRateLimit('EMAIL_SEND', data.toEmail);
+  if (!rateCheck.allowed) {
+    return {
+      success: false,
+      error: `Limite de envios atingido. Por segurança, aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)} antes de reenviar para este destinatário.`,
+    };
+  }
+
   const { subject, html } = generateInviteEmailHtml(data);
 
   try {
@@ -47,11 +57,14 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
     const json = await res.json();
 
     if (res.ok && json.success) {
+      recordAttempt('EMAIL_SEND', data.toEmail, true);
       return {
         success: true,
         messageId: json.messageId,
       };
     }
+
+    recordAttempt('EMAIL_SEND', data.toEmail, false);
 
     const isDomainRestriction =
       json.statusCode === 403 ||
@@ -64,6 +77,7 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
       resendDomainRestriction: isDomainRestriction,
     };
   } catch (err: any) {
+    recordAttempt('EMAIL_SEND', data.toEmail, false);
     console.warn('[EmailService] Erro:', err);
     return {
       success: false,

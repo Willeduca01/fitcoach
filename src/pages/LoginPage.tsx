@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { MasterInviteModal } from '../components/common/MasterInviteModal';
+import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
 import {
   Dumbbell,
   ShieldCheck,
+  ShieldAlert,
   User,
   Sparkles,
   ArrowRight,
@@ -32,23 +34,56 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
   // UI States
   const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id || 'student-1');
   const [showDemoAccess, setShowDemoAccess] = useState(false);
   const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
 
+  // Monitorar se há bloqueio ativo por rate limiting
+  useEffect(() => {
+    const status = checkRateLimit('LOGIN', email || 'global');
+    if (!status.allowed) {
+      setLockoutSeconds(status.lockoutSeconds);
+    }
+  }, [email]);
+
+  // Contador regressivo em tempo real durante o bloqueio
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setErrorMessage('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
+
   const handleRealLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
-
-    setIsLoading(true);
-    setErrorMessage('');
 
     let cleanEmail = email.trim().toLowerCase();
     if (cleanEmail === 'teste@fitcoach' || cleanEmail === 'teste@fitcoach.com') {
       cleanEmail = 'teste@fitcoach.com.br';
     }
+
+    // 1. Verificação estrita de Rate Limit antes de processar
+    const rateCheck = checkRateLimit('LOGIN', cleanEmail);
+    if (!rateCheck.allowed) {
+      setLockoutSeconds(rateCheck.lockoutSeconds);
+      setErrorMessage(`Muitas tentativas falhas. Por segurança, aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)}.`);
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage('');
 
     const isDemoLogin = cleanEmail === 'teste@fitcoach.com.br';
     if (isDemoLogin) {
@@ -58,20 +93,28 @@ export const LoginPage: React.FC = () => {
     }
 
     try {
-      // 1. Redirecionamento forçado e garantido para a conta do Desenvolvedor Master
+      // 2. Redirecionamento forçado para o Desenvolvedor Master
       if (cleanEmail === 'dev.dev@fitcoach.com.br') {
         const result = await loginWithPassword(cleanEmail, password);
         if (!result.success) {
-          setErrorMessage(result.error || 'Credenciais inválidas.');
+          const afterAttempt = recordAttempt('LOGIN', cleanEmail, false);
+          if (!afterAttempt.allowed) {
+            setLockoutSeconds(afterAttempt.lockoutSeconds);
+            setErrorMessage(`Limite de tentativas excedido! Bloqueado temporariamente por ${formatSecondsToTime(afterAttempt.lockoutSeconds)}.`);
+          } else {
+            setErrorMessage(`${result.error || 'Credenciais inválidas.'} (${afterAttempt.remainingAttempts} tentativas restantes)`);
+          }
           setIsLoading(false);
           return;
         }
+        recordAttempt('LOGIN', cleanEmail, true);
         navigate('/master');
         return;
       }
 
-      // 2. Login com a Conta Demo Oficial (Teste@fitcoach / Contademo)
+      // 3. Login com a Conta Demo Oficial (Teste@fitcoach / Contademo)
       if (isDemoLogin && password === 'Contademo') {
+        recordAttempt('LOGIN', cleanEmail, true);
         const result = await loginWithPassword('teste@fitcoach.com.br', 'Contademo');
         if (result.success) {
           navigate('/dashboard');
@@ -82,13 +125,22 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // 3. Login de Professor Real ou Aluno Real via Supabase
+      // 4. Login de Professor Real ou Aluno Real via Supabase
       const result = await loginWithPassword(cleanEmail, password);
       if (!result.success) {
-        setErrorMessage(result.error || 'Credenciais inválidas. Verifique seu e-mail e senha.');
+        const afterAttempt = recordAttempt('LOGIN', cleanEmail, false);
+        if (!afterAttempt.allowed) {
+          setLockoutSeconds(afterAttempt.lockoutSeconds);
+          setErrorMessage(`Limite de tentativas de login excedido! Por segurança, sua conta foi temporariamente suspensa por ${formatSecondsToTime(afterAttempt.lockoutSeconds)}.`);
+        } else {
+          setErrorMessage(`${result.error || 'Credenciais inválidas. Verifique seu e-mail e senha.'} (${afterAttempt.remainingAttempts} tentativas restantes)`);
+        }
         setIsLoading(false);
         return;
       }
+
+      // Login bem-sucedido: zera o contador de falhas
+      recordAttempt('LOGIN', cleanEmail, true);
 
       // Redireciona com base no papel detectado
       const targetRole = result.role || role;
@@ -100,6 +152,7 @@ export const LoginPage: React.FC = () => {
         navigate('/dashboard');
       }
     } catch (err: any) {
+      recordAttempt('LOGIN', cleanEmail, false);
       setErrorMessage(err.message || 'Erro ao realizar login.');
       setIsLoading(false);
     }
@@ -184,7 +237,22 @@ export const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {errorMessage && (
+            {lockoutSeconds > 0 && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-rose-300 text-xs animate-in fade-in">
+                <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold text-rose-200">Acesso Bloqueado Temporariamente</p>
+                  <p className="text-[11px] text-zinc-300">
+                    Muitas tentativas sem sucesso. Por segurança, tente novamente em:
+                  </p>
+                  <p className="text-sm font-mono font-bold text-rose-400 mt-1">
+                    {formatSecondsToTime(lockoutSeconds)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {errorMessage && lockoutSeconds === 0 && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
@@ -193,13 +261,18 @@ export const LoginPage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-zinc-950 font-semibold text-sm transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 group"
+              disabled={isLoading || lockoutSeconds > 0}
+              className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 font-semibold text-sm transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 group"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Entrando...</span>
+                </>
+              ) : lockoutSeconds > 0 ? (
+                <>
+                  <ShieldAlert className="w-4 h-4 text-zinc-950" />
+                  <span>Bloqueado ({formatSecondsToTime(lockoutSeconds)})</span>
                 </>
               ) : (
                 <>

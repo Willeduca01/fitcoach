@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
+
 export const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -60,19 +62,33 @@ export const RegisterPage: React.FC = () => {
     const code = codeToValidate.trim().toUpperCase();
     if (!code) return;
 
+    // Rate limit: previne força bruta de códigos de convite
+    const rateCheck = checkRateLimit('INVITE_VALIDATION', 'global');
+    if (!rateCheck.allowed) {
+      setErrorMsg(`Muitas tentativas de validação de convite. Por segurança, aguarde ${formatSecondsToTime(rateCheck.lockoutSeconds)}.`);
+      return;
+    }
+
     setIsValidating(true);
     setErrorMsg('');
     try {
       const result = await validateInviteCode(code);
       setValidationResult(result);
       if (result.valid) {
+        recordAttempt('INVITE_VALIDATION', 'global', true);
         if (result.targetName) setName(result.targetName);
         if (result.targetEmail) setEmail(result.targetEmail);
         else if (prefillEmail) setEmail(prefillEmail);
       } else {
-        setErrorMsg('Convite não encontrado, expirado ou já utilizado.');
+        const afterAttempt = recordAttempt('INVITE_VALIDATION', 'global', false);
+        if (!afterAttempt.allowed) {
+          setErrorMsg(`Limite de tentativas de validação atingido! Aguarde ${formatSecondsToTime(afterAttempt.lockoutSeconds)}.`);
+        } else {
+          setErrorMsg(`Convite não encontrado, expirado ou já utilizado. (${afterAttempt.remainingAttempts} tentativas restantes)`);
+        }
       }
     } catch {
+      recordAttempt('INVITE_VALIDATION', 'global', false);
       setErrorMsg('Falha ao conectar para validar o convite.');
     } finally {
       setIsValidating(false);
@@ -108,6 +124,13 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    // Rate limit para cadastro
+    const signupCheck = checkRateLimit('SIGNUP', email || 'global');
+    if (!signupCheck.allowed) {
+      setErrorMsg(`Muitas tentativas de cadastro recentes. Aguarde ${formatSecondsToTime(signupCheck.lockoutSeconds)}.`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await signUpWithInviteCode({
@@ -119,11 +142,13 @@ export const RegisterPage: React.FC = () => {
       });
 
       if (!res.success) {
+        recordAttempt('SIGNUP', email || 'global', false);
         setErrorMsg(res.error || 'Não foi possível concluir o cadastro.');
         setIsSubmitting(false);
         return;
       }
 
+      recordAttempt('SIGNUP', email || 'global', true);
       setIsSuccess(true);
       confetti({
         particleCount: 80,
