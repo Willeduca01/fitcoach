@@ -79,5 +79,5 @@ function emailServerPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), emailServerPlugin()],
-  base: '/fitcoach/',
+  base: process.env.VERCEL ? '/' : '/fitcoach/',
 });

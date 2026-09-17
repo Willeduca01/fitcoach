@@ -223,7 +223,8 @@ export const MasterDashboardPage: React.FC = () => {
         targetEmail: cleanEmail,
       });
 
-      const inviteUrl = `${window.location.origin}/fitcoach/#/ativar-convite?code=${invite.code}&email=${encodeURIComponent(cleanEmail)}`;
+      const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
+      const inviteUrl = `${window.location.origin}${basePath}/#/ativar-convite?code=${invite.code}&email=${encodeURIComponent(cleanEmail)}`;
 
       setGeneratedInvite({
         code: invite.code,
@@ -261,9 +262,10 @@ export const MasterDashboardPage: React.FC = () => {
       setTrainerEmail('');
       setInvitesCount((prev) => ({ ...prev, total: prev.total + 1, pending: prev.pending + 1 }));
     } catch {
+      const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const code = `PROF-${randomSuffix}`;
-      const url = `${window.location.origin}/fitcoach/#/ativar-convite?code=${code}&email=${encodeURIComponent(cleanEmail)}`;
+      const url = `${window.location.origin}${basePath}/#/ativar-convite?code=${code}&email=${encodeURIComponent(cleanEmail)}`;
       setGeneratedInvite({ code, url, sentEmail: cleanEmail });
       setEmailFeedback({
         type: 'warning',

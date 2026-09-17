@@ -60,7 +60,8 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
         plan: selectedPlan,
       });
 
-      const inviteUrl = `${window.location.origin}/fitcoach/#/ativar-convite?code=${invite.code}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
+      const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
+      const inviteUrl = `${window.location.origin}${basePath}/#/ativar-convite?code=${invite.code}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
       setGeneratedInvite({
         code: invite.code,
         url: inviteUrl,
@@ -92,9 +93,10 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
       }
     } catch (err: any) {
       // Fallback para demonstração local
+      const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const demoCode = `ALUNO-${randomSuffix}`;
-      const demoUrl = `${window.location.origin}/fitcoach/#/ativar-convite?code=${demoCode}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
+      const demoUrl = `${window.location.origin}${basePath}/#/ativar-convite?code=${demoCode}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
       setGeneratedInvite({
         code: demoCode,
         url: demoUrl,
