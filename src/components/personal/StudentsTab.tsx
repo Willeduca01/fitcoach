@@ -4,6 +4,7 @@ import { Student, PlanType, StudentStatus, PaymentStatus } from '../../types';
 import { Badge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { StudentDetailModal } from './StudentDetailModal';
+import { InviteStudentModal } from './InviteStudentModal';
 import {
   Users,
   Plus,
@@ -14,7 +15,8 @@ import {
   ChevronRight,
   Filter,
   Calendar,
-  Activity
+  Activity,
+  UserPlus
 } from 'lucide-react';
 
 interface StudentsTabProps {
@@ -35,6 +37,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
 
   // Form para novo aluno
   const [isNewStudentModalOpen, setIsNewStudentModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('5511');
@@ -58,19 +61,18 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
       avatarUrl,
       status: 'ATIVO',
       plan,
-      monthlyFee: Number(monthlyFee),
-      dueDay: Number(dueDay),
+      monthlyFee,
+      dueDay,
       paymentStatus: 'EM_DIA',
       startDate: new Date().toISOString().split('T')[0],
       primaryGoal,
-      notes: notes || undefined,
+      notes,
     });
 
-    // Reset
+    setIsNewStudentModalOpen(false);
     setName('');
     setEmail('');
-    setPhone('5511');
-    setIsNewStudentModalOpen(false);
+    setNotes('');
   };
 
   const filteredStudents = students.filter((student) => {
@@ -98,13 +100,23 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => setIsNewStudentModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-emerald-500/20"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Cadastrar Novo Aluno</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsInviteModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/[0.08] text-xs font-semibold transition-all shadow-sm group"
+          >
+            <UserPlus className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+            <span>Convidar Aluno (Link/WhatsApp)</span>
+          </button>
+
+          <button
+            onClick={() => setIsNewStudentModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-emerald-500/20"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Cadastrar Manualmente</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -414,6 +426,12 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
           </div>
         </form>
       </Modal>
+
+      {/* Modal de Convidar Aluno com Link / WhatsApp */}
+      <InviteStudentModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+      />
     </div>
   );
 };

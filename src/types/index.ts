@@ -110,3 +110,32 @@ export interface UserSession {
   role: UserRole;
   currentStudentId?: string; // Se role === 'STUDENT'
 }
+
+export type InviteType = 'PERSONAL' | 'STUDENT';
+export type InviteStatus = 'PENDENTE' | 'USADO' | 'EXPIRADO' | 'REVOGADO';
+
+export interface Invite {
+  id: string;
+  code: string;
+  type: InviteType;
+  createdBy?: string;
+  personalId?: string;
+  targetName?: string;
+  targetEmail?: string;
+  plan?: string;
+  status: InviteStatus;
+  usedBy?: string;
+  usedAt?: string;
+  expiresAt?: string;
+  createdAt: string;
+}
+
+export interface InviteValidationResult {
+  valid: boolean;
+  inviteType?: InviteType;
+  targetName?: string;
+  targetEmail?: string;
+  plan?: string;
+  personalId?: string;
+  personalName?: string;
+}

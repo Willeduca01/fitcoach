@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppDataProvider } from './context/AppDataContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { PersonalDashboardPage } from './pages/PersonalDashboardPage';
 import { StudentPortalPage } from './pages/StudentPortalPage';
 import { QuickSwitcher } from './components/common/QuickSwitcher';
@@ -27,6 +28,8 @@ export const AppContent: React.FC = () => {
     <div className="relative min-h-screen bg-[#09090b] text-zinc-100 font-sans transition-colors duration-200">
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/cadastro" element={<RegisterPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/dashboard" element={<PersonalDashboardPage />} />
         <Route path="/portal-aluno" element={<StudentPortalPage />} />
         <Route path="/" element={<RootRedirect />} />
