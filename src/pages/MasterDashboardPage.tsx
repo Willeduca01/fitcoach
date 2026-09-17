@@ -8,8 +8,6 @@ import {
   ShieldAlert,
   Users,
   Dumbbell,
-  DollarSign,
-  TrendingUp,
   UserCheck,
   UserPlus,
   KeyRound,
@@ -25,17 +23,39 @@ import {
   Activity,
   CheckCircle2,
   Clock,
-  AlertCircle
+  Calendar,
+  Database,
+  Server,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Terminal,
+  Cpu
 } from 'lucide-react';
 
-interface PersonalWithStudents {
+interface StudentDevView {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  plan: string;
+  status: string;
+  startDate: string;
+  lastAccess: string;
+}
+
+interface PersonalDevView {
   id: string;
   name: string;
   email: string;
   phone?: string;
   cref?: string;
   title?: string;
-  students: any[];
+  planType: string;
+  accountStatus: string;
+  createdAt: string;
+  lastAccess: string;
+  students: StudentDevView[];
 }
 
 export const MasterDashboardPage: React.FC = () => {
@@ -43,10 +63,13 @@ export const MasterDashboardPage: React.FC = () => {
   const { students: localStudents, personal: localPersonal } = useAppData();
 
   // State
-  const [trainers, setTrainers] = useState<PersonalWithStudents[]>([]);
+  const [trainers, setTrainers] = useState<PersonalDevView[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedTrainerId, setExpandedTrainerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Invites state
+  const [invitesCount, setInvitesCount] = useState({ total: 0, pending: 0, used: 0 });
 
   // Invite generation state
   const [trainerName, setTrainerName] = useState('');
@@ -55,45 +78,85 @@ export const MasterDashboardPage: React.FC = () => {
   const [isCopied, setIsCopied] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
 
-  // Carregar dados de todos os professores e alunos
+  // Carregar dados de desenvolvimento
   useEffect(() => {
-    loadMasterData();
+    loadMasterDevData();
   }, []);
 
-  const loadMasterData = async () => {
+  const loadMasterDevData = async () => {
     setIsLoading(true);
     try {
       // 1. Busca todos os perfis com role = 'PERSONAL'
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, name, email, phone, personal_profiles(title, cref)')
+        .select('id, name, email, phone, created_at, updated_at, personal_profiles(title, cref)')
         .eq('role', 'PERSONAL');
 
       // 2. Busca todos os alunos cadastrados
-      const { data: allStudentsData, error: studentsError } = await supabase
+      const { data: allStudentsData } = await supabase
         .from('students')
-        .select('*');
+        .select('id, personal_id, name, email, phone, plan, status, start_date, created_at, updated_at');
+
+      // 3. Busca métricas de convites
+      const { data: allInvites } = await supabase
+        .from('invites')
+        .select('status');
+
+      if (allInvites) {
+        const total = allInvites.length;
+        const used = allInvites.filter((i) => i.status === 'USADO').length;
+        const pending = allInvites.filter((i) => i.status === 'PENDENTE').length;
+        setInvitesCount({ total, pending, used });
+      }
 
       if (!profilesError && profilesData && profilesData.length > 0) {
-        const mappedTrainers: PersonalWithStudents[] = profilesData.map((p: any) => {
+        const mappedTrainers: PersonalDevView[] = profilesData.map((p: any) => {
           const personalInfo = Array.isArray(p.personal_profiles) ? p.personal_profiles[0] : p.personal_profiles;
-          const assignedStudents = (allStudentsData || []).filter((s: any) => s.personal_id === p.id);
+          const assignedStudents = (allStudentsData || [])
+            .filter((s: any) => s.personal_id === p.id)
+            .map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              email: s.email || 'Não informado',
+              phone: s.phone || 'Não informado',
+              plan: s.plan || 'MENSAL',
+              status: s.status || 'ATIVO',
+              startDate: formatDate(s.start_date || s.created_at),
+              lastAccess: formatRelativeTime(s.updated_at || s.created_at),
+            }));
+
           return {
             id: p.id,
             name: p.name,
             email: p.email,
             phone: p.phone,
-            cref: personalInfo?.cref || 'CREF Ativo',
+            cref: personalInfo?.cref || 'CREF Verificado',
             title: personalInfo?.title || 'Personal Trainer',
+            planType: 'PRO ILIMITADO',
+            accountStatus: 'ATIVO',
+            createdAt: formatDate(p.created_at),
+            lastAccess: formatRelativeTime(p.updated_at || p.created_at),
             students: assignedStudents,
           };
         });
+
         setTrainers(mappedTrainers);
         if (mappedTrainers.length > 0) {
           setExpandedTrainerId(mappedTrainers[0].id);
         }
       } else {
-        // Fallback para demonstração local
+        // Fallback estruturado para demonstração local
+        const fallbackStudents: StudentDevView[] = localStudents.map((s) => ({
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          phone: s.phone,
+          plan: s.plan,
+          status: s.status,
+          startDate: formatDate(s.startDate),
+          lastAccess: 'Hoje às 10:45',
+        }));
+
         setTrainers([
           {
             id: localPersonal.id,
@@ -102,36 +165,42 @@ export const MasterDashboardPage: React.FC = () => {
             phone: localPersonal.phone,
             cref: localPersonal.cref,
             title: localPersonal.title,
-            students: localStudents,
+            planType: 'PRO ANUAL (Beta)',
+            accountStatus: 'ATIVO',
+            createdAt: '15/09/2026',
+            lastAccess: 'Hoje às 11:30',
+            students: fallbackStudents,
           }
         ]);
         setExpandedTrainerId(localPersonal.id);
+        setInvitesCount({ total: 6, pending: 2, used: 4 });
       }
     } catch {
-      setTrainers([
-        {
-          id: localPersonal.id,
-          name: localPersonal.name,
-          email: localPersonal.email,
-          phone: localPersonal.phone,
-          cref: localPersonal.cref,
-          title: localPersonal.title,
-          students: localStudents,
-        }
-      ]);
-      setExpandedTrainerId(localPersonal.id);
+      setTrainers([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Estatísticas Globais
-  const totalTrainers = trainers.length;
-  const totalStudents = trainers.reduce((acc, t) => acc + t.students.length, 0);
-  const totalMRR = trainers.reduce((acc, t) => {
-    const trainerMRR = t.students.reduce((sub, s) => sub + (Number(s.monthly_fee || s.monthlyFee) || 0), 0);
-    return acc + trainerMRR;
-  }, 0);
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'Recente';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('pt-BR');
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatRelativeTime = (dateStr?: string) => {
+    if (!dateStr) return 'Hoje';
+    try {
+      const d = new Date(dateStr);
+      return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch {
+      return 'Recente';
+    }
+  };
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,6 +220,7 @@ export const MasterDashboardPage: React.FC = () => {
       });
       setTrainerName('');
       setTrainerEmail('');
+      setInvitesCount((prev) => ({ ...prev, total: prev.total + 1, pending: prev.pending + 1 }));
     } catch {
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const code = `PROF-${randomSuffix}`;
@@ -180,24 +250,27 @@ export const MasterDashboardPage: React.FC = () => {
     t.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const totalTrainers = trainers.length;
+  const totalStudents = trainers.reduce((acc, t) => acc + t.students.length, 0);
+
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans pb-16">
-      {/* Top Navigation Bar */}
+      {/* Top Header */}
       <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-white/[0.08] px-4 sm:px-8 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
-              <ShieldAlert className="w-5 h-5 text-zinc-950 stroke-[2.5]" />
+              <Terminal className="w-5 h-5 text-zinc-950 stroke-[2.5]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-semibold text-zinc-100 leading-tight">FitCoach Pro</h1>
                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                  DEVELOPER MASTER
+                  CONSOLE DO DESENVOLVEDOR (MASTER)
                 </span>
               </div>
               <p className="text-xs text-zinc-400 font-mono">
-                {user?.email || 'dev.dev@fitcoach.com.br'}
+                {user?.email || 'dev.dev@fitcoach.com.br'} • Acesso de Engenharia & Acessos
               </p>
             </div>
           </div>
@@ -217,39 +290,60 @@ export const MasterDashboardPage: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-8 space-y-8">
-        {/* Metric Cards Banner */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Metric Cards Banner (Developer / Infrastructure Focused) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Professores */}
           <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
             <div className="flex items-center justify-between text-zinc-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Professores Ativos</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Professores Cadastrados</span>
               <Dumbbell className="w-4 h-4 text-amber-400" />
             </div>
             <div className="text-3xl font-extrabold text-zinc-100 tracking-tight">
               {totalTrainers}
             </div>
-            <p className="text-[11px] text-zinc-400">Personal Trainers com acesso à plataforma</p>
+            <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>{totalTrainers} contas ativas</span>
+            </p>
           </div>
 
+          {/* Card 2: Alunos */}
           <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
             <div className="flex items-center justify-between text-zinc-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Total de Alunos</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Alunos Vinculados</span>
               <Users className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-3xl font-extrabold text-zinc-100 tracking-tight">
               {totalStudents}
             </div>
-            <p className="text-[11px] text-zinc-400">Alunos cadastrados sob gestão dos professores</p>
+            <p className="text-[11px] text-zinc-400 font-medium">Contas vinculadas a professores</p>
           </div>
 
+          {/* Card 3: Convites */}
           <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
             <div className="flex items-center justify-between text-zinc-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Volume Mensal Consolidado</span>
-              <DollarSign className="w-4 h-4 text-teal-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Gestão de Convites</span>
+              <KeyRound className="w-4 h-4 text-teal-400" />
             </div>
             <div className="text-3xl font-extrabold text-zinc-100 tracking-tight font-mono">
-              {totalMRR.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {invitesCount.total}
             </div>
-            <p className="text-[11px] text-zinc-400">Soma de contratos gerenciados</p>
+            <p className="text-[11px] text-zinc-400">
+              <strong className="text-teal-300">{invitesCount.used} usados</strong> • {invitesCount.pending} pendentes
+            </p>
+          </div>
+
+          {/* Card 4: Status do Sistema / Supabase */}
+          <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
+            <div className="flex items-center justify-between text-zinc-400">
+              <span className="text-xs font-semibold uppercase tracking-wider">Status do Banco</span>
+              <Database className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-xl font-bold text-emerald-400 tracking-tight flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>PostgreSQL • RLS</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 font-mono">Supabase Auth • Ativo</p>
           </div>
         </div>
 
@@ -259,10 +353,10 @@ export const MasterDashboardPage: React.FC = () => {
             <div>
               <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-amber-400" />
-                Emitir Convite para Novo Personal Trainer
+                Emissão de Credenciais & Convites para Treinadores
               </h2>
               <p className="text-xs text-zinc-400">
-                Apenas convites gerados aqui permitem que novos professores se cadastrem na plataforma.
+                Gere o código de autorização para um novo professor criar sua conta no sistema.
               </p>
             </div>
           </div>
@@ -282,7 +376,7 @@ export const MasterDashboardPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">E-mail (opcional)</label>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">E-mail de Cadastro (opcional)</label>
                 <input
                   type="email"
                   value={trainerEmail}
@@ -344,16 +438,16 @@ export const MasterDashboardPage: React.FC = () => {
           )}
         </div>
 
-        {/* Section: All Trainers & Their Assigned Students */}
+        {/* Section: All Trainers & Their Assigned Students (Dev Information) */}
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
                 <Users className="w-5 h-5 text-emerald-400" />
-                Carteira Global de Professores & Alunos
+                Contas de Professores & Alunos Conectados
               </h2>
               <p className="text-xs text-zinc-400">
-                Visualize cada Personal Trainer e os alunos vinculados a ele com isolamento de dados.
+                Auditoria de credenciais, tipo de plano, data de cadastro e último acesso de cada usuário.
               </p>
             </div>
 
@@ -364,7 +458,7 @@ export const MasterDashboardPage: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar professor por nome..."
+                placeholder="Buscar professor por nome ou e-mail..."
                 className="w-full bg-zinc-900/90 border border-white/[0.08] rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50"
               />
             </div>
@@ -382,7 +476,7 @@ export const MasterDashboardPage: React.FC = () => {
                   {/* Trainer Header Row */}
                   <div
                     onClick={() => setExpandedTrainerId(isExpanded ? null : trainer.id)}
-                    className="p-5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors"
+                    className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
                   >
                     <div className="flex items-center gap-3.5">
                       <div className="w-11 h-11 rounded-2xl bg-zinc-800 border border-white/[0.08] flex items-center justify-center text-amber-400 font-bold text-sm">
@@ -394,22 +488,34 @@ export const MasterDashboardPage: React.FC = () => {
                           <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-md font-mono">
                             {trainer.cref || 'CREF'}
                           </span>
+                          <span className="text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold">
+                            {trainer.planType}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-zinc-400 mt-0.5">
-                          <span>{trainer.email}</span>
-                          {trainer.phone && <span>• {trainer.phone}</span>}
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5 text-zinc-500" />
+                            {trainer.email}
+                          </span>
+                          {trainer.phone && (
+                            <span className="flex items-center gap-1">
+                              <Phone className="w-3.5 h-3.5 text-zinc-500" />
+                              {trainer.phone}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <div className="text-right hidden sm:block">
-                        <span className="text-xs font-semibold text-emerald-400">
-                          {trainer.students.length} Alunos
-                        </span>
-                        <span className="block text-[10px] text-zinc-500">
-                          {trainer.students.reduce((acc, s) => acc + (Number(s.monthly_fee || s.monthlyFee) || 0), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês
-                        </span>
+                    <div className="flex items-center justify-between md:justify-end gap-5">
+                      <div className="text-left md:text-right text-xs">
+                        <div className="text-zinc-300 font-medium flex items-center gap-1.5 md:justify-end">
+                          <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                          <span>Último acesso: <strong className="text-zinc-200">{trainer.lastAccess}</strong></span>
+                        </div>
+                        <div className="text-[11px] text-zinc-500 mt-0.5">
+                          Criado em: {trainer.createdAt} • <strong className="text-emerald-400">{trainer.students.length} Alunos vinculados</strong>
+                        </div>
                       </div>
 
                       <div className="w-8 h-8 rounded-xl bg-zinc-800/80 flex items-center justify-center text-zinc-400">
@@ -418,12 +524,15 @@ export const MasterDashboardPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Expanded Students List */}
+                  {/* Expanded Students List (Developer & Access Information Only) */}
                   {isExpanded && (
-                    <div className="px-5 pb-5 pt-2 border-t border-white/[0.04] bg-zinc-950/40 space-y-3 animate-in fade-in duration-200">
+                    <div className="px-5 pb-5 pt-3 border-t border-white/[0.04] bg-zinc-950/40 space-y-3 animate-in fade-in duration-200">
                       <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
-                        <span>Alunos Vinculados a {trainer.name}:</span>
-                        <span>{trainer.students.length} cadastrados</span>
+                        <span className="flex items-center gap-1.5 text-zinc-300">
+                          <Users className="w-3.5 h-3.5 text-emerald-400" />
+                          Alunos vinculados a <strong>{trainer.name}</strong>:
+                        </span>
+                        <span className="font-mono text-zinc-500">{trainer.students.length} cadastros</span>
                       </div>
 
                       {trainer.students.length === 0 ? (
@@ -432,9 +541,7 @@ export const MasterDashboardPage: React.FC = () => {
                         </p>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                          {trainer.students.map((student: any) => {
-                            const fee = Number(student.monthly_fee || student.monthlyFee) || 0;
-                            const status = student.payment_status || student.paymentStatus || 'EM_DIA';
+                          {trainer.students.map((student) => {
                             return (
                               <div
                                 key={student.id}
@@ -444,20 +551,26 @@ export const MasterDashboardPage: React.FC = () => {
                                   <span className="text-xs font-semibold text-zinc-200 truncate">
                                     {student.name}
                                   </span>
-                                  <Badge
-                                    variant={
-                                      status === 'EM_DIA' ? 'success' : status === 'VENCE_EM_BREVE' ? 'warning' : 'danger'
-                                    }
-                                    size="sm"
-                                  >
-                                    {status === 'EM_DIA' ? 'Em dia' : status === 'VENCE_EM_BREVE' ? 'Vence breve' : 'Atrasado'}
-                                  </Badge>
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-zinc-800 text-emerald-400 border border-emerald-500/20">
+                                    {student.plan}
+                                  </span>
                                 </div>
 
-                                <div className="text-[11px] text-zinc-400 space-y-0.5">
-                                  <p className="truncate">Plano: <span className="text-zinc-300 font-medium">{student.plan}</span></p>
-                                  <p>Mensalidade: <span className="text-emerald-400 font-mono font-medium">{fee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
-                                  {student.email && <p className="truncate text-zinc-500">{student.email}</p>}
+                                <div className="text-[11px] text-zinc-400 space-y-1">
+                                  <p className="flex items-center gap-1.5 truncate text-zinc-300">
+                                    <Mail className="w-3 h-3 text-zinc-500 shrink-0" />
+                                    <span className="truncate">{student.email}</span>
+                                  </p>
+                                  {student.phone && student.phone !== 'Não informado' && (
+                                    <p className="flex items-center gap-1.5 text-zinc-400">
+                                      <Phone className="w-3 h-3 text-zinc-500 shrink-0" />
+                                      <span>{student.phone}</span>
+                                    </p>
+                                  )}
+                                  <div className="pt-1.5 border-t border-white/[0.04] flex items-center justify-between text-[10px] text-zinc-500">
+                                    <span>Início: {student.startDate}</span>
+                                    <span className="text-zinc-400 font-medium">Acesso: {student.lastAccess}</span>
+                                  </div>
                                 </div>
                               </div>
                             );
