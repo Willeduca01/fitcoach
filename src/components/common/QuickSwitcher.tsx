@@ -31,6 +31,11 @@ export const QuickSwitcher: React.FC = () => {
     window.location.reload();
   };
 
+  // Ocultar alternador nas telas de login e cadastro
+  if (!role || location.pathname === '/login' || location.pathname === '/cadastro' || location.pathname === '/register') {
+    return null;
+  }
+
   return (
     <div className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-50 flex flex-col items-end font-sans">
       {/* Expanded Menu */}

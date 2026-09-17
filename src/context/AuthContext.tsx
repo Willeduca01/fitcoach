@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
     }
-    return 'PERSONAL'; // Padrão inicial
+    return null; // Inicialmente deslogado para exibir a tela de login
   });
 
   const [currentStudentId, setCurrentStudentId] = useState<string | null>(() => {
@@ -51,12 +51,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return parsed.currentStudentId || 'student-1';
+        return parsed.currentStudentId || null;
       } catch {
-        return 'student-1';
+        return null;
       }
     }
-    return 'student-1';
+    return null;
   });
 
   // Monitorar autenticação do Supabase
