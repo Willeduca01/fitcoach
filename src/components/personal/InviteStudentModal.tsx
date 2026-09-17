@@ -3,6 +3,7 @@ import { Modal } from '../common/Modal';
 import { useAuth } from '../../context/AuthContext';
 import { useAppData } from '../../context/AppDataContext';
 import { createStudentInvite } from '../../lib/supabase';
+import { sendInviteEmail } from '../../services/emailService';
 import {
   UserPlus,
   Copy,
@@ -13,7 +14,9 @@ import {
   MessageCircle,
   Clock,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Mail,
+  CheckCircle2
 } from 'lucide-react';
 
 interface InviteStudentModalProps {
@@ -29,7 +32,11 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
   const [studentEmail, setStudentEmail] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<'MENSAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL'>('MENSAL');
   
-  const [generatedInvite, setGeneratedInvite] = useState<{ code: string; url: string } | null>(null);
+  const [generatedInvite, setGeneratedInvite] = useState<{ code: string; url: string; sentEmail?: string } | null>(null);
+  const [emailFeedback, setEmailFeedback] = useState<{
+    type: 'success' | 'warning';
+    message: string;
+  } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -40,29 +47,58 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
 
     setIsCreating(true);
     setErrorMsg('');
+    setEmailFeedback(null);
+
+    const cleanEmail = studentEmail.trim();
 
     try {
       const personalId = user?.id || personal.id;
       const invite = await createStudentInvite({
         personalId,
         targetName: studentName.trim(),
-        targetEmail: studentEmail.trim() || undefined,
+        targetEmail: cleanEmail || undefined,
         plan: selectedPlan,
       });
 
-      const inviteUrl = `${window.location.origin}/cadastro?convite=${invite.code}`;
+      const inviteUrl = `${window.location.origin}/fitcoach/#/ativar-convite?code=${invite.code}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
       setGeneratedInvite({
         code: invite.code,
         url: inviteUrl,
+        sentEmail: cleanEmail,
       });
+
+      if (cleanEmail) {
+        const emailRes = await sendInviteEmail({
+          toName: studentName.trim(),
+          toEmail: cleanEmail,
+          inviteCode: invite.code,
+          inviteUrl,
+          role: 'student',
+          trainerName: personal.name || 'Personal Trainer',
+          planName: selectedPlan,
+        });
+
+        if (emailRes.success) {
+          setEmailFeedback({
+            type: 'success',
+            message: `Convite enviado para ${cleanEmail}!`,
+          });
+        } else if (emailRes.resendDomainRestriction) {
+          setEmailFeedback({
+            type: 'warning',
+            message: `Convite gerado! Nota: No plano de testes do Resend, e-mails só chegam ao e-mail cadastrado (williamsilveira0204@gmail.com). Encaminhe o link via WhatsApp ao aluno.`,
+          });
+        }
+      }
     } catch (err: any) {
       // Fallback para demonstração local
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const demoCode = `ALUNO-${randomSuffix}`;
-      const demoUrl = `${window.location.origin}/cadastro?convite=${demoCode}`;
+      const demoUrl = `${window.location.origin}/fitcoach/#/ativar-convite?code=${demoCode}${cleanEmail ? `&email=${encodeURIComponent(cleanEmail)}` : ''}`;
       setGeneratedInvite({
         code: demoCode,
         url: demoUrl,
+        sentEmail: cleanEmail,
       });
     } finally {
       setIsCreating(false);
@@ -86,6 +122,7 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
 
   const handleReset = () => {
     setGeneratedInvite(null);
+    setEmailFeedback(null);
     setStudentName('');
     setStudentEmail('');
     setErrorMsg('');
@@ -181,6 +218,23 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
                 Encaminhe o link para <strong className="text-emerald-300">{studentName}</strong>.
               </p>
             </div>
+
+            {emailFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  emailFeedback.type === 'success'
+                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+                    : 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
+                }`}
+              >
+                {emailFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                )}
+                <span>{emailFeedback.message}</span>
+              </div>
+            )}
 
             {/* Code Box */}
             <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-white/[0.08] space-y-2">

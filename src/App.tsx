@@ -34,6 +34,7 @@ export const AppContent: React.FC = () => {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cadastro" element={<RegisterPage />} />
+        <Route path="/ativar-convite" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/master" element={<MasterDashboardPage />} />
         <Route path="/dashboard" element={<PersonalDashboardPage />} />

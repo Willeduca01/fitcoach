@@ -51,7 +51,7 @@ export async function validateInviteCode(code: string): Promise<InviteValidation
       .from('invites')
       .select('*, personal:profiles!personal_id(name)')
       .eq('code', cleanCode)
-      .eq('status', 'PENDENTE')
+      .in('status', ['PENDENTE', 'pending'])
       .maybeSingle();
 
     if (!tableError && inviteData) {

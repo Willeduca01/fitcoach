@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { supabase, createPersonalInvite } from '../lib/supabase';
+import { sendInviteEmail } from '../services/emailService';
 import { ThemeToggle } from '../components/common/ThemeToggle';
 import { Badge } from '../components/common/Badge';
 import {
@@ -74,7 +75,11 @@ export const MasterDashboardPage: React.FC = () => {
   // Invite generation state
   const [trainerName, setTrainerName] = useState('');
   const [trainerEmail, setTrainerEmail] = useState('');
-  const [generatedInvite, setGeneratedInvite] = useState<{ code: string; url: string } | null>(null);
+  const [generatedInvite, setGeneratedInvite] = useState<{ code: string; url: string; sentEmail?: string } | null>(null);
+  const [emailFeedback, setEmailFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
 
@@ -204,28 +209,66 @@ export const MasterDashboardPage: React.FC = () => {
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trainerName.trim()) return;
+    const cleanName = trainerName.trim();
+    const cleanEmail = trainerEmail.trim();
+    if (!cleanName || !cleanEmail) return;
 
     setIsCreatingInvite(true);
+    setEmailFeedback(null);
+
     try {
+      // 1. Gera registro de convite no Supabase com role de treinador
       const invite = await createPersonalInvite({
-        targetName: trainerName.trim(),
-        targetEmail: trainerEmail.trim() || undefined,
+        targetName: cleanName,
+        targetEmail: cleanEmail,
       });
 
-      const inviteUrl = `${window.location.origin}/fitcoach/#/cadastro?convite=${invite.code}`;
+      const inviteUrl = `${window.location.origin}/fitcoach/#/ativar-convite?code=${invite.code}&email=${encodeURIComponent(cleanEmail)}`;
+
       setGeneratedInvite({
         code: invite.code,
         url: inviteUrl,
+        sentEmail: cleanEmail,
       });
+
+      // 2. Dispara e-mail real formatado em Dark Mode via Resend
+      const emailResult = await sendInviteEmail({
+        toName: cleanName,
+        toEmail: cleanEmail,
+        inviteCode: invite.code,
+        inviteUrl,
+        role: 'trainer',
+      });
+
+      if (emailResult.success) {
+        setEmailFeedback({
+          type: 'success',
+          message: `Convite enviado com sucesso para ${cleanEmail}! O professor receberá o link e código no Gmail.`,
+        });
+      } else if (emailResult.resendDomainRestriction) {
+        setEmailFeedback({
+          type: 'warning',
+          message: `Convite gerado! Nota do Resend: Em modo de testes (sem domínio próprio cadastrado), os e-mails só são entregues para williamsilveira0204@gmail.com. Para enviar a outros e-mails, registre um domínio em resend.com/domains. O link direto está disponível abaixo.`,
+        });
+      } else {
+        setEmailFeedback({
+          type: 'warning',
+          message: `Convite salvo no banco, mas houve falha no envio por e-mail (${emailResult.error}). Copie o link abaixo ou envie no WhatsApp.`,
+        });
+      }
+
       setTrainerName('');
       setTrainerEmail('');
       setInvitesCount((prev) => ({ ...prev, total: prev.total + 1, pending: prev.pending + 1 }));
     } catch {
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const code = `PROF-${randomSuffix}`;
-      const url = `${window.location.origin}/fitcoach/#/cadastro?convite=${code}`;
-      setGeneratedInvite({ code, url });
+      const url = `${window.location.origin}/fitcoach/#/ativar-convite?code=${code}&email=${encodeURIComponent(cleanEmail)}`;
+      setGeneratedInvite({ code, url, sentEmail: cleanEmail });
+      setEmailFeedback({
+        type: 'warning',
+        message: `Convite criado em modo de demonstração (${code}). Copie o link abaixo para enviar ao professor.`,
+      });
     } finally {
       setIsCreatingInvite(false);
     }
@@ -361,6 +404,40 @@ export const MasterDashboardPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Toast / Alerta de Feedback de Envio */}
+          {emailFeedback && (
+            <div
+              className={`p-4 rounded-2xl text-xs flex items-start gap-3 animate-in fade-in duration-300 border ${
+                emailFeedback.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                  : emailFeedback.type === 'warning'
+                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                  : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+              }`}
+            >
+              {emailFeedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 space-y-1">
+                <div className="font-semibold">
+                  {emailFeedback.type === 'success'
+                    ? 'E-mail Enviado com Sucesso!'
+                    : 'Aviso sobre o Envio de E-mail'}
+                </div>
+                <p className="text-[11px] leading-relaxed opacity-90">{emailFeedback.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailFeedback(null)}
+                className="text-zinc-400 hover:text-zinc-200 text-xs ml-2"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {!generatedInvite ? (
             <form onSubmit={handleCreateInvite} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
               <div>
@@ -376,9 +453,10 @@ export const MasterDashboardPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">E-mail de Cadastro (opcional)</label>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">E-mail de Cadastro *</label>
                 <input
                   type="email"
+                  required
                   value={trainerEmail}
                   onChange={(e) => setTrainerEmail(e.target.value)}
                   placeholder="carlos.personal@email.com"
@@ -388,11 +466,11 @@ export const MasterDashboardPage: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={isCreatingInvite || !trainerName.trim()}
+                disabled={isCreatingInvite || !trainerName.trim() || !trainerEmail.trim()}
                 className="py-2.5 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-semibold text-xs transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-2"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{isCreatingInvite ? 'Gerando...' : 'Gerar Convite de Treinador'}</span>
+                <span>{isCreatingInvite ? 'Enviando convite...' : 'Gerar Convite de Treinador'}</span>
               </button>
             </form>
           ) : (
@@ -404,12 +482,22 @@ export const MasterDashboardPage: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setGeneratedInvite(null)}
+                  onClick={() => {
+                    setGeneratedInvite(null);
+                    setEmailFeedback(null);
+                  }}
                   className="text-xs text-zinc-400 hover:text-zinc-200"
                 >
-                  Fechar
+                  Novo Convite
                 </button>
               </div>
+
+              {generatedInvite.sentEmail && (
+                <div className="text-xs text-zinc-300 flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Destinatário: <strong className="text-zinc-100">{generatedInvite.sentEmail}</strong></span>
+                </div>
+              )}
 
               <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-white/[0.06] text-xs font-mono text-zinc-300 select-all truncate">
                 {generatedInvite.url}

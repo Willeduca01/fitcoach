@@ -24,14 +24,21 @@ export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const { signUpWithInviteCode } = useAuth();
 
-  const urlInvite = searchParams.get('convite') || searchParams.get('invite') || '';
+  const urlInvite =
+    searchParams.get('code') ||
+    searchParams.get('convite') ||
+    searchParams.get('invite') ||
+    searchParams.get('token') ||
+    '';
+  const urlEmail = searchParams.get('email') || '';
+
   const [inviteCode, setInviteCode] = useState<string>(urlInvite.toUpperCase());
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [validationResult, setValidationResult] = useState<InviteValidationResult | null>(null);
 
   // Form State
   const [name, setName] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
+  const [email, setEmail] = useState<string>(urlEmail);
   const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -41,12 +48,15 @@ export const RegisterPage: React.FC = () => {
 
   // Validação automática se houver código na URL
   useEffect(() => {
-    if (urlInvite) {
-      handleValidate(urlInvite);
+    if (urlEmail) {
+      setEmail(urlEmail);
     }
-  }, [urlInvite]);
+    if (urlInvite) {
+      handleValidate(urlInvite, urlEmail);
+    }
+  }, [urlInvite, urlEmail]);
 
-  const handleValidate = async (codeToValidate: string) => {
+  const handleValidate = async (codeToValidate: string, prefillEmail?: string) => {
     const code = codeToValidate.trim().toUpperCase();
     if (!code) return;
 
@@ -58,6 +68,7 @@ export const RegisterPage: React.FC = () => {
       if (result.valid) {
         if (result.targetName) setName(result.targetName);
         if (result.targetEmail) setEmail(result.targetEmail);
+        else if (prefillEmail) setEmail(prefillEmail);
       } else {
         setErrorMsg('Convite não encontrado, expirado ou já utilizado.');
       }
