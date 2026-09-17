@@ -45,8 +45,45 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
     setErrorMessage('');
 
+    let cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail === 'teste@fitcoach' || cleanEmail === 'teste@fitcoach.com') {
+      cleanEmail = 'teste@fitcoach.com.br';
+    }
+
+    const isDemoLogin = cleanEmail === 'teste@fitcoach.com.br';
+    if (isDemoLogin) {
+      localStorage.setItem('fitcoach_demo_mode', 'true');
+    } else {
+      localStorage.removeItem('fitcoach_demo_mode');
+    }
+
     try {
-      const result = await loginWithPassword(email, password);
+      // 1. Redirecionamento forçado e garantido para a conta do Desenvolvedor Master
+      if (cleanEmail === 'dev.dev@fitcoach.com.br') {
+        const result = await loginWithPassword(cleanEmail, password);
+        if (!result.success) {
+          setErrorMessage(result.error || 'Credenciais inválidas.');
+          setIsLoading(false);
+          return;
+        }
+        navigate('/master');
+        return;
+      }
+
+      // 2. Login com a Conta Demo Oficial (Teste@fitcoach / Contademo)
+      if (isDemoLogin && password === 'Contademo') {
+        const result = await loginWithPassword('teste@fitcoach.com.br', 'Contademo');
+        if (result.success) {
+          navigate('/dashboard');
+          return;
+        }
+        loginAsPersonal();
+        navigate('/dashboard');
+        return;
+      }
+
+      // 3. Login de Professor Real ou Aluno Real via Supabase
+      const result = await loginWithPassword(cleanEmail, password);
       if (!result.success) {
         setErrorMessage(result.error || 'Credenciais inválidas. Verifique seu e-mail e senha.');
         setIsLoading(false);
@@ -116,15 +153,15 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">E-mail de Acesso</label>
+              <label className="block text-xs text-zinc-400 mb-1">E-mail ou Usuário de Acesso</label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="seu@email.com"
+                  placeholder="seu@email.com ou Teste@fitcoach"
                   className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl pl-10 pr-4 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
                 />
               </div>

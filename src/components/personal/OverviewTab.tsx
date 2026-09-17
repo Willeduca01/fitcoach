@@ -38,7 +38,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   onSelectStudent,
   onNavigateTab,
 }) => {
-  const { students, sessions, invoices, financialHistory, updateSessionStatus } = useAppData();
+  const { personal, students, sessions, invoices, financialHistory, updateSessionStatus, isDemoMode } = useAppData();
 
   // Cálculos de KPIs
   const activeStudents = students.filter((s) => s.status === 'ATIVO');
@@ -70,7 +70,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             Painel Geral & Métricas
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Visão executiva em tempo real de alunos, faturamento e agenda diária.
+            {isDemoMode ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-emerald-400 font-medium">Modo Demonstrativo Ativo</span> — Apresentação comercial de funcionalidades.
+              </span>
+            ) : (
+              `Olá, ${personal.name}! Visão executiva em tempo real dos seus alunos, faturamento e agenda.`
+            )}
           </p>
         </div>
 
@@ -91,6 +98,32 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Onboarding Banner para Treinadores Novos / Reais sem alunos ainda */}
+      {!isDemoMode && students.length === 0 && (
+        <div className="rounded-2xl bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-zinc-900 border border-emerald-500/30 p-6 shadow-xl relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold uppercase tracking-wider">
+                  Boas-vindas ao FitCoach
+                </span>
+                <h3 className="text-lg font-bold text-white">Sua conta de treinador está ativa!</h3>
+              </div>
+              <p className="text-sm text-zinc-400 max-w-xl">
+                Você ainda não possui alunos vinculados. Gere um convite exclusivo ou cadastre seus alunos para começar a prescrever treinos e acompanhar mensalidades.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigateTab('students')}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all shadow-lg shadow-emerald-500/20 shrink-0"
+            >
+              <Users className="w-4 h-4" />
+              <span>Convidar Primeiro Aluno</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -188,31 +221,38 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
 
           <div className="h-56 w-full flex-1 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={52}
-                  outerRadius={75}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#09090b" strokeWidth={2} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#18181b', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#f4f4f5' }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value) => <span className="text-xs text-zinc-400">{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            {pieData.length === 0 ? (
+              <div className="text-center px-4 py-8 text-zinc-500 text-xs">
+                <Users className="w-8 h-8 mx-auto mb-2 text-zinc-600 opacity-50" />
+                Nenhum aluno ativo no momento.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={75}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="#09090b" strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#18181b', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#f4f4f5' }}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    formatter={(value) => <span className="text-xs text-zinc-400">{value}</span>}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>

@@ -53,11 +53,11 @@ export const App: React.FC = () => {
   return (
     <HashRouter>
       <ThemeProvider>
-        <AppDataProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <AppDataProvider>
             <AppContent />
-          </AuthProvider>
-        </AppDataProvider>
+          </AppDataProvider>
+        </AuthProvider>
       </ThemeProvider>
     </HashRouter>
   );

@@ -179,7 +179,35 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
       </div>
 
       {/* Students Cards Grid */}
-      {filteredStudents.length === 0 ? (
+      {students.length === 0 ? (
+        <div className="p-12 text-center rounded-2xl bg-zinc-900/60 border border-emerald-500/20 text-zinc-300 font-sans max-w-xl mx-auto my-8 space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-400">
+            <UserPlus className="w-7 h-7" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-zinc-100">Nenhum aluno cadastrado ainda</h3>
+            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+              Comece a utilizar seu painel profissional adicionando seu primeiro cliente por convite com link/WhatsApp ou cadastro manual.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setIsInviteModalOpen(true)}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Convidar por Link / WhatsApp</span>
+            </button>
+            <button
+              onClick={() => setIsNewStudentModalOpen(true)}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/[0.08] text-xs font-semibold transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Manualmente</span>
+            </button>
+          </div>
+        </div>
+      ) : filteredStudents.length === 0 ? (
         <div className="p-12 text-center rounded-2xl bg-zinc-900/40 border border-dashed border-white/[0.08] text-zinc-500 font-sans">
           Nenhum aluno encontrado com os filtros atuais.
         </div>
