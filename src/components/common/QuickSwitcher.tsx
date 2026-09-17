@@ -7,11 +7,23 @@ import { ThemeToggle } from './ThemeToggle';
 
 export const QuickSwitcher: React.FC = () => {
   const { role, currentStudentId, switchRole } = useAuth();
-  const { students, resetToDemoData } = useAppData();
+  const { students, resetToDemoData, isDemoMode } = useAppData();
   const navigate = useNavigate();
   const location = useLocation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
+
+  // Ocultar completamente o alternador de perfis para contas reais.
+  // Este recurso de alternar para a visão do aluno é exclusivo da conta demonstrativa comercial (Teste@fitcoach).
+  if (
+    !isDemoMode ||
+    !role ||
+    location.pathname === '/login' ||
+    location.pathname === '/cadastro' ||
+    location.pathname === '/register'
+  ) {
+    return null;
+  }
 
   const activeStudent = students.find((s) => s.id === currentStudentId) || students[0];
 
@@ -30,11 +42,6 @@ export const QuickSwitcher: React.FC = () => {
     setShowConfirmReset(false);
     window.location.reload();
   };
-
-  // Ocultar alternador nas telas de login e cadastro
-  if (!role || location.pathname === '/login' || location.pathname === '/cadastro' || location.pathname === '/register') {
-    return null;
-  }
 
   return (
     <div className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-50 flex flex-col items-end font-sans">

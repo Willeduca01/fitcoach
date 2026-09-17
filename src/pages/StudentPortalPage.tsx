@@ -11,11 +11,16 @@ import { ContactTab } from '../components/student/ContactTab';
 
 export const StudentPortalPage: React.FC = () => {
   const { role, currentStudentId } = useAuth();
-  const { students } = useAppData();
+  const { students, isDemoMode } = useAppData();
   const [currentTab, setCurrentTab] = useState<StudentTab>('home');
 
   if (!role) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Professores reais não acessam a visão de aluno
+  if (role === 'PERSONAL' && !isDemoMode) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   const activeStudent = students.find((s) => s.id === currentStudentId) || students[0];

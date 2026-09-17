@@ -30,7 +30,7 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
   children,
 }) => {
   const { logout } = useAuth();
-  const { personal, students, invoices, getUnreadCountForPersonal } = useAppData();
+  const { personal, students, invoices, getUnreadCountForPersonal, isDemoMode } = useAppData();
 
   const overdueInvoicesCount = invoices.filter((i) => i.status === 'ATRASADO').length;
   const activeStudentsCount = students.filter((s) => s.status === 'ATIVO').length;
@@ -122,7 +122,7 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs text-zinc-400">Modo Admin Ativo</span>
+              <span className="text-xs text-zinc-400">{isDemoMode ? 'Modo Demonstração' : 'Treinador Conectado'}</span>
             </div>
             <div className="flex items-center gap-1">
               <ThemeToggle />
