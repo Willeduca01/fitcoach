@@ -5,6 +5,8 @@ import { AppDataProvider } from './context/AppDataContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { PersonalDashboardPage } from './pages/PersonalDashboardPage';
 import { StudentPortalPage } from './pages/StudentPortalPage';
 import { MasterDashboardPage } from './pages/MasterDashboardPage';
@@ -33,6 +35,10 @@ export const AppContent: React.FC = () => {
     <div className="relative min-h-screen bg-[#09090b] text-zinc-100 font-sans transition-colors duration-200">
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/cadastro" element={<RegisterPage />} />
         <Route path="/ativar-convite" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />

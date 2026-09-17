@@ -130,3 +130,94 @@ export function generateInviteEmailHtml(data: InviteEmailData): { subject: strin
 
   return { subject, html };
 }
+
+export interface PasswordResetEmailData {
+  toEmail: string;
+  userName?: string;
+  resetUrl: string;
+}
+
+export function generatePasswordResetEmailHtml(data: PasswordResetEmailData): { subject: string; html: string } {
+  const subject = 'FitCoach Pro: Redefinição de Senha da sua Conta';
+  const name = data.userName ? `Olá, ${data.userName}!` : 'Olá!';
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="background-color: #09090b; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5;">
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #09090b; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width: 580px; background-color: #18181b; border-radius: 24px; border: 1px solid #27272a; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+          <tr>
+            <td style="padding: 36px 36px 20px 36px; text-align: center; border-bottom: 1px solid #27272a;">
+              <div style="margin-bottom: 12px;">
+                <span style="font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">FitCoach <span style="color: #34d399;">Pro</span></span>
+              </div>
+              <div>
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 999px; background-color: rgba(16, 185, 129, 0.1); color: #34d399; font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; border: 1px solid rgba(16, 185, 129, 0.2);">
+                  RECUPERAÇÃO DE SENHA
+                </span>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 32px 36px 20px 36px;">
+              <h1 style="font-size: 22px; font-weight: 700; color: #ffffff; margin: 0 0 16px 0; letter-spacing: -0.3px;">
+                ${name}
+              </h1>
+              <p style="font-size: 15px; line-height: 1.6; color: #d4d4d8; margin: 0 0 24px 0;">
+                Recebemos uma solicitação para redefinir a senha de acesso da sua conta (professor ou aluno) no <strong>FitCoach Pro</strong>.
+              </p>
+              <p style="font-size: 14px; line-height: 1.5; color: #a1a1aa; margin: 0 0 28px 0;">
+                Clique no botão abaixo para escolher uma nova senha segura. Por motivos de segurança, este link expira em 60 minutos.
+              </p>
+
+              <div style="text-align: center; margin-bottom: 28px;">
+                <a href="${data.resetUrl}" style="display: inline-block; padding: 14px 32px; background-color: #10b981; color: #09090b; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 14px; box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3); text-align: center;">
+                  Redefinir Minha Senha
+                </a>
+              </div>
+
+              <p style="font-size: 12px; color: #71717a; text-align: center; margin: 0 0 8px 0;">
+                Ou copie e cole este link no seu navegador:
+              </p>
+              <p style="font-size: 11px; color: #34d399; text-align: center; word-break: break-all; margin: 0;">
+                <a href="${data.resetUrl}" style="color: #34d399; text-decoration: underline;">${data.resetUrl}</a>
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 0 36px 28px 36px;">
+              <div style="padding: 14px 18px; background-color: rgba(255, 255, 255, 0.03); border-radius: 12px; border-left: 3px solid #10b981; font-size: 12px; color: #a1a1aa; line-height: 1.5;">
+                <strong style="color: #ffffff;">Não solicitou a troca?</strong> Se você não solicitou a redefinição de senha, ignore este e-mail. Sua senha atual permanecerá inalterada e sua conta continua protegida.
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 24px 36px; background-color: #111113; border-top: 1px solid #27272a; text-align: center;">
+              <p style="font-size: 12px; color: #71717a; margin: 0 0 6px 0;">
+                FitCoach Pro • Plataforma Inteligente de Gestão Fitness
+              </p>
+              <p style="font-size: 11px; color: #52525b; margin: 0;">
+                Mensagem automática de segurança. Por favor, não responda a este e-mail.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return { subject, html };
+}
+

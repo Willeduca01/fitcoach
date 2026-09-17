@@ -223,6 +223,12 @@ export const LoginPage: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs text-zinc-400">Senha</label>
+                <Link
+                  to="/recuperar-senha"
+                  className="text-[11px] text-zinc-400 hover:text-emerald-400 transition-colors"
+                >
+                  Esqueceu a senha?
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
