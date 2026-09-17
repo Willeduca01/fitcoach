@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { PersonalDashboardPage } from './pages/PersonalDashboardPage';
 import { StudentPortalPage } from './pages/StudentPortalPage';
+import { MasterDashboardPage } from './pages/MasterDashboardPage';
 import { QuickSwitcher } from './components/common/QuickSwitcher';
 
 const RootRedirect: React.FC = () => {
@@ -14,6 +15,10 @@ const RootRedirect: React.FC = () => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (role === 'MASTER') {
+    return <Navigate to="/master" replace />;
   }
 
   if (role === 'PERSONAL') {
@@ -30,6 +35,7 @@ export const AppContent: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cadastro" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/master" element={<MasterDashboardPage />} />
         <Route path="/dashboard" element={<PersonalDashboardPage />} />
         <Route path="/portal-aluno" element={<StudentPortalPage />} />
         <Route path="/" element={<RootRedirect />} />

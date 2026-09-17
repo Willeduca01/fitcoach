@@ -1,4 +1,4 @@
-export type UserRole = 'PERSONAL' | 'STUDENT';
+export type UserRole = 'PERSONAL' | 'STUDENT' | 'MASTER';
 
 export type PlanType = 'MENSAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
 export type PaymentStatus = 'EM_DIA' | 'VENCE_EM_BREVE' | 'ATRASADO';
