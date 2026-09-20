@@ -11,6 +11,7 @@ import {
   AlertCircle,
   ArrowRight,
   ShieldCheck,
+  ShieldAlert,
   Loader2,
   KeyRound,
   Check
@@ -26,11 +27,146 @@ export const ResetPasswordPage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
+  const [hasValidSession, setHasValidSession] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [countdown, setCountdown] = useState(5);
 
   const emailHint = searchParams.get('email') || '';
+
+  // Verificação e estabelecimento de sessão de recuperação
+  useEffect(() => {
+    let isMounted = true;
+
+    const initRecoverySession = async () => {
+      setIsVerifyingSession(true);
+
+      // 1. Verifica se já existe sessão ativa
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        if (isMounted) {
+          setHasValidSession(true);
+          setIsVerifyingSession(false);
+        }
+        return;
+      }
+
+      // 2. Extrai tokens da URL (suporta hash e search parameters)
+      const fullHash = window.location.hash || '';
+      const fullSearch = window.location.search || '';
+
+      // Verifica PKCE code (?code=...)
+      let code = searchParams.get('code');
+      if (!code && fullHash.includes('code=')) {
+        const hashQuery = fullHash.split('?')[1] || '';
+        const hashParams = new URLSearchParams(hashQuery);
+        code = hashParams.get('code');
+      }
+
+      if (code) {
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error && data.session) {
+            if (isMounted) {
+              setHasValidSession(true);
+              setIsVerifyingSession(false);
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('[ResetPassword] Erro ao trocar code:', e);
+        }
+      }
+
+      // Verifica access_token e refresh_token no hash
+      if (fullHash.includes('access_token=')) {
+        const hashParts = fullHash.split('#');
+        for (const part of hashParts) {
+          if (part.includes('access_token=')) {
+            const tokenParams = new URLSearchParams(part);
+            const accessToken = tokenParams.get('access_token');
+            const refreshToken = tokenParams.get('refresh_token');
+            if (accessToken && refreshToken) {
+              try {
+                const { data, error } = await supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken,
+                });
+                if (!error && data.session) {
+                  if (isMounted) {
+                    setHasValidSession(true);
+                    setIsVerifyingSession(false);
+                  }
+                  return;
+                }
+              } catch (e) {
+                console.warn('[ResetPassword] Erro ao setar sessão via hash:', e);
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Verifica token_hash (fluxo de verifyOtp)
+      let tokenHash = searchParams.get('token_hash');
+      if (!tokenHash && fullHash.includes('token_hash=')) {
+        const hashQuery = fullHash.split('?')[1] || '';
+        const hashParams = new URLSearchParams(hashQuery);
+        tokenHash = hashParams.get('token_hash');
+      }
+
+      if (tokenHash) {
+        try {
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: 'recovery',
+          });
+          if (!error && data.session) {
+            if (isMounted) {
+              setHasValidSession(true);
+              setIsVerifyingSession(false);
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('[ResetPassword] Erro ao verificar OTP token_hash:', e);
+        }
+      }
+
+      // 4. Escuta evento PASSWORD_RECOVERY do Supabase
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+        if (event === 'PASSWORD_RECOVERY' || (newSession && event === 'SIGNED_IN')) {
+          if (isMounted) {
+            setHasValidSession(true);
+            setIsVerifyingSession(false);
+          }
+        }
+      });
+
+      // Se após 1.5 segundos não houver sessão nem token, encerra verificação
+      setTimeout(() => {
+        if (isMounted) {
+          supabase.auth.getSession().then(({ data: { session: finalSession } }) => {
+            if (isMounted) {
+              setHasValidSession(Boolean(finalSession));
+              setIsVerifyingSession(false);
+            }
+          });
+        }
+      }, 1500);
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    };
+
+    initRecoverySession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Redirecionamento automático após sucesso
   useEffect(() => {
@@ -144,6 +280,50 @@ export const ResetPasswordPage: React.FC = () => {
                 <span>Fazer Login Agora</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
+            </div>
+          ) : isVerifyingSession ? (
+            <div className="text-center space-y-3 py-10 animate-in fade-in duration-300">
+              <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
+              <p className="text-xs text-zinc-400">Verificando autorização de recuperação...</p>
+            </div>
+          ) : !hasValidSession ? (
+            <div className="text-center space-y-5 py-3 animate-in fade-in duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+                <ShieldAlert className="w-7 h-7" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-lg font-bold text-white">
+                  Link Expirado ou Sessão Ausente
+                </h3>
+                <p className="text-xs text-zinc-300 max-w-sm mx-auto leading-relaxed">
+                  Para garantir a segurança da sua conta, a redefinição de senha exige abrir o link seguro enviado para o seu e-mail.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-white/[0.06] text-xs text-zinc-400 text-left space-y-1">
+                <p className="font-semibold text-zinc-300 text-[11px]">Como redefinir sua senha:</p>
+                <p className="text-[11px] text-zinc-400">1. Clique no botão abaixo para solicitar um novo link.</p>
+                <p className="text-[11px] text-zinc-400">2. Acesse seu e-mail e clique no botão de redefinição.</p>
+                <p className="text-[11px] text-zinc-400">3. Você será redirecionado para cadastrar sua nova senha.</p>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <Link
+                  to="/esqueci-senha"
+                  className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10"
+                >
+                  <span>Solicitar Novo Link de Recuperação</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+
+                <Link
+                  to="/login"
+                  className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>Voltar ao Login</span>
+                </Link>
+              </div>
             </div>
           ) : (
             <>

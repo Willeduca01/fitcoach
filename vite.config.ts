@@ -1,13 +1,19 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import nodemailer from 'nodemailer';
 
 /**
- * Plugin seguro do Vite para interceptar chamadas ao Resend no servidor local Node.js
- * Evita bloqueios de CORS e consome a chave RESEND_API_KEY do arquivo .env local
+ * Plugin seguro do Vite para interceptar chamadas ao servidor de e-mail local Node.js
+ * Suporta Gmail SMTP e Resend, consumindo variáveis do arquivo .env local
  */
 function emailServerPlugin(): Plugin {
   const env = loadEnv('development', process.cwd(), '');
   const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+  const gmailUser = env.GMAIL_USER || process.env.GMAIL_USER;
+  const gmailPass = env.GMAIL_APP_PASSWORD || process.env.GMAIL_APP_PASSWORD;
+  const supabaseUrl = env.VITE_SUPABASE_URL || 'https://xmpbzpdggsonzftueynw.supabase.co';
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
   return {
     name: 'fitcoach-email-server',
     configureServer(server) {
@@ -22,7 +28,8 @@ function emailServerPlugin(): Plugin {
           req.on('end', async () => {
             try {
               const body = JSON.parse(bodyStr || '{}');
-              const { to, subject, html } = body;
+              const { to, subject } = body;
+              let html = body.html;
 
               if (!to || !html) {
                 res.statusCode = 400;
@@ -31,6 +38,64 @@ function emailServerPlugin(): Plugin {
                 return;
               }
 
+              // Se for redefinição de senha, gera o link seguro com token criptográfico do Supabase
+              if (body.type === 'PASSWORD_RESET' && serviceRoleKey) {
+                try {
+                  const { createClient } = await import('@supabase/supabase-js');
+                  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+                  const origin = req.headers.origin || 'http://localhost:5173';
+                  const basePath = '/fitcoach';
+                  const redirectTo = `${origin}${basePath}/#/redefinir-senha`;
+
+                  const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                    type: 'recovery',
+                    email: to,
+                    options: { redirectTo },
+                  });
+
+                  if (!linkError && linkData?.properties?.action_link) {
+                    const actionLink = linkData.properties.action_link;
+                    console.log('[EmailServer] Link de recuperação oficial gerado pelo Supabase Admin:', actionLink);
+                    html = html.replaceAll('__FITCOACH_RESET_URL__', actionLink);
+                    html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, actionLink);
+                    html = html.replace(/href=""/g, `href="${actionLink}"`);
+                    html = html.replace(/href=''/g, `href='${actionLink}'`);
+                  } else {
+                    console.warn('[EmailServer] Erro ao gerar link pelo Supabase Admin:', linkError);
+                  }
+                } catch (adminErr) {
+                  console.warn('[EmailServer] Falha ao processar Supabase Admin:', adminErr);
+                }
+              }
+
+              // Prioridade 1: Gmail SMTP configurado no .env
+              if (gmailUser && gmailPass) {
+                console.log(`[EmailServer] Enviando e-mail via Gmail SMTP (${gmailUser}) para: ${to}`);
+                const transporter = nodemailer.createTransport({
+                  host: 'smtp.gmail.com',
+                  port: 587,
+                  secure: false,
+                  auth: {
+                    user: gmailUser,
+                    pass: gmailPass.replace(/\s+/g, ''),
+                  },
+                });
+
+                const info = await transporter.sendMail({
+                  from: `"FitCoach Pro" <${gmailUser}>`,
+                  to,
+                  subject: subject || 'Convite de Acesso • FitCoach Pro',
+                  html,
+                });
+
+                console.log('[EmailServer] E-mail enviado com sucesso via Gmail SMTP:', info.messageId);
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, messageId: info.messageId }));
+                return;
+              }
+
+              // Prioridade 2: Fallback para Resend API
               console.log(`[EmailServer] Enviando convite via Resend para: ${to}`);
 
               const response = await fetch('https://api.resend.com/emails', {

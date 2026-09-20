@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Student, ChatMessage } from '../../types';
+import { Student, ChatMessage, ChatMedia } from '../../types';
 import { useAppData } from '../../context/AppDataContext';
+import { MediaUploadModal } from '../common/MediaUploadModal';
+import { ChatMediaBubble } from '../common/ChatMediaBubble';
 import {
   Send,
   HelpCircle,
@@ -10,7 +12,8 @@ import {
   ShieldCheck,
   CheckCheck,
   Check,
-  Sparkles
+  Sparkles,
+  Paperclip
 } from 'lucide-react';
 
 interface ContactTabProps {
@@ -20,6 +23,9 @@ interface ContactTabProps {
 export const ContactTab: React.FC<ContactTabProps> = ({ student }) => {
   const { personal, messages, sendMessage, markMessagesAsRead } = useAppData();
   const [inputText, setInputText] = useState('');
+  const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Filtrar apenas as mensagens desta thread (deste aluno)
@@ -72,9 +78,9 @@ export const ContactTab: React.FC<ContactTabProps> = ({ student }) => {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] max-w-4xl mx-auto w-full">
+    <div className="p-3 sm:p-4 lg:p-6 flex flex-col h-[calc(100dvh-114px)] md:h-screen max-w-5xl mx-auto w-full min-h-0">
       {/* Header do Chat Interno */}
-      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/[0.06] shadow-soft-card backdrop-blur-md flex items-center justify-between shrink-0 mb-3">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-zinc-900/60 border border-white/[0.06] shadow-soft-card backdrop-blur-md flex items-center justify-between shrink-0 mb-2.5">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
@@ -152,9 +158,16 @@ export const ContactTab: React.FC<ContactTabProps> = ({ student }) => {
                     </span>
                   )}
 
-                  <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
-                    {msg.content}
-                  </p>
+                  {/* Renderização de Mídia (Foto ou Vídeo) se presente */}
+                  {msg.media && (
+                    <ChatMediaBubble media={msg.media} isMe={isMe} />
+                  )}
+
+                  {msg.content && (
+                    <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </p>
+                  )}
 
                   <div
                     className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono ${
@@ -181,8 +194,32 @@ export const ContactTab: React.FC<ContactTabProps> = ({ student }) => {
       {/* Barra de Digitação Fixa */}
       <form
         onSubmit={handleSend}
-        className="p-2 bg-zinc-900/80 border border-white/[0.08] rounded-2xl flex items-center gap-2 shadow-soft-card shrink-0 mt-2 backdrop-blur-md"
+        className="p-2 bg-zinc-900/80 border border-white/[0.08] rounded-2xl flex items-center gap-1.5 shadow-soft-card shrink-0 mt-2 backdrop-blur-md"
       >
+        {/* Input de Arquivo Oculto e Botão de Anexo */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setSelectedMediaFile(file);
+              setIsMediaModalOpen(true);
+            }
+            e.target.value = '';
+          }}
+          accept="image/*,video/*"
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="p-2 rounded-xl text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/80 transition-colors shrink-0"
+          title="Enviar foto ou vídeo"
+        >
+          <Paperclip className="w-4 h-4" />
+        </button>
+
         <input
           type="text"
           value={inputText}
@@ -198,6 +235,19 @@ export const ContactTab: React.FC<ContactTabProps> = ({ student }) => {
           <Send className="w-4 h-4 stroke-[2.5]" />
         </button>
       </form>
+
+      {/* Modal de Upload e Compressão de Mídia */}
+      <MediaUploadModal
+        isOpen={isMediaModalOpen}
+        onClose={() => {
+          setIsMediaModalOpen(false);
+          setSelectedMediaFile(null);
+        }}
+        file={selectedMediaFile}
+        onSendMedia={(media, caption) => {
+          sendMessage(student.id, 'STUDENT', caption, 'GERAL', media);
+        }}
+      />
     </div>
   );
 };

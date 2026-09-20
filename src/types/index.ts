@@ -50,6 +50,17 @@ export interface SessionSchedule {
   routineName?: string;
 }
 
+export interface ChatMedia {
+  url: string; // Base64 ou URL da mídia
+  type: 'image' | 'video';
+  fileName: string;
+  fileSize?: number;
+  compressedSize?: number;
+  allowDownload: boolean;
+  expiresAt?: string; // Data ISO caso expire em 24h
+  thumbnailUrl?: string; // Thumbnail para vídeos
+}
+
 export interface ChatMessage {
   id: string;
   senderRole: 'PERSONAL' | 'STUDENT';
@@ -60,10 +71,12 @@ export interface ChatMessage {
   timestamp: string; // HH:mm ou DD/MM HH:mm
   read: boolean;
   category?: 'DUVIDA' | 'AGENDAMENTO' | 'PAGAMENTO' | 'AVALIACAO' | 'GERAL';
+  media?: ChatMedia;
 }
 
 export interface Student {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   phone: string; // formato para WhatsApp, ex: "5511988887777"

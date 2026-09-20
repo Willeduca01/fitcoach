@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppData } from '../../context/AppDataContext';
-import { Student, ChatMessage } from '../../types';
+import { Student, ChatMessage, ChatMedia } from '../../types';
 import { Badge } from '../common/Badge';
+import { MediaUploadModal } from '../common/MediaUploadModal';
+import { ChatMediaBubble } from '../common/ChatMediaBubble';
 import {
   MessageSquare,
   Search,
@@ -12,7 +14,8 @@ import {
   Flame,
   Calendar,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Paperclip
 } from 'lucide-react';
 
 interface MessagesTabProps {
@@ -31,6 +34,9 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
+  const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId) || students[0];
@@ -69,7 +75,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   ];
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto w-full h-[calc(100vh-80px)] flex flex-col space-y-4 font-sans">
+    <div className="p-3 sm:p-4 lg:p-6 max-w-7xl mx-auto w-full h-[calc(100dvh-114px)] md:h-screen flex flex-col space-y-3 font-sans min-h-0">
       {/* Top Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
         <div>
@@ -244,9 +250,16 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                         </span>
                       )}
 
-                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
-                        {msg.content}
-                      </p>
+                      {/* Renderização de Mídia se presente */}
+                      {msg.media && (
+                        <ChatMediaBubble media={msg.media} isMe={isMe} />
+                      )}
+
+                      {msg.content && (
+                        <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
+                      )}
 
                       <div
                         className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono ${
@@ -291,6 +304,30 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
             }}
             className="p-3 border-t border-white/[0.06] bg-zinc-900/90 rounded-b-2xl flex items-center gap-2 shrink-0"
           >
+            {/* Input de Arquivo Oculto e Botão de Anexo */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setSelectedMediaFile(file);
+                  setIsMediaModalOpen(true);
+                }
+                e.target.value = '';
+              }}
+              accept="image/*,video/*"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 rounded-xl text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/80 transition-colors shrink-0"
+              title="Enviar foto ou vídeo"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             <input
               type="text"
               value={inputText}
@@ -306,6 +343,21 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
               <Send className="w-4 h-4 stroke-[2.5]" />
             </button>
           </form>
+
+          {/* Modal de Upload e Compressão de Mídia */}
+          <MediaUploadModal
+            isOpen={isMediaModalOpen}
+            onClose={() => {
+              setIsMediaModalOpen(false);
+              setSelectedMediaFile(null);
+            }}
+            file={selectedMediaFile}
+            onSendMedia={(media, caption) => {
+              if (selectedStudent) {
+                sendMessage(selectedStudent.id, 'PERSONAL', caption, 'GERAL', media);
+              }
+            }}
+          />
         </div>
       </div>
     </div>

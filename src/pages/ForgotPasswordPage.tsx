@@ -97,23 +97,25 @@ export const ForgotPasswordPage: React.FC = () => {
     setErrorMessage('');
 
     try {
-      // 1. Dispara o reset oficial via Supabase Auth (gera o token seguro)
-      const res = await sendPasswordResetEmail(cleanEmail);
+      // 1. Envia o e-mail de recuperação formatado pelo nosso serviço de e-mail (Gmail SMTP com link assinado do Supabase)
+      const origin = window.location.origin;
+      const basePath = window.location.pathname.startsWith('/fitcoach') ? '/fitcoach' : '';
+      const fallbackResetUrl = `${origin}${basePath}/#/redefinir-senha?email=${encodeURIComponent(cleanEmail)}`;
 
-      // 2. Dispara e-mail estilizado com layout Dark Mode do FitCoach Pro
-      const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
-      const resetUrl = `${window.location.origin}${basePath}/#/redefinir-senha?email=${encodeURIComponent(cleanEmail)}`;
-      
-      await sendResendResetEmail({
+      const res = await sendResendResetEmail({
         toEmail: cleanEmail,
-        resetUrl,
-      }).catch(() => null);
+        resetUrl: fallbackResetUrl,
+      });
 
-      if (!res.success && res.error && !res.error.includes('rate limit')) {
-        recordAttempt('EMAIL_SEND', cleanEmail, false);
-        setErrorMessage(res.error || 'Não foi possível processar a solicitação de redefinição.');
-        setIsLoading(false);
-        return;
+      if (!res.success) {
+        // Fallback: Dispara diretamente pelo Supabase Auth caso o endpoint não responda
+        const supabaseRes = await sendPasswordResetEmail(cleanEmail);
+        if (!supabaseRes.success) {
+          recordAttempt('EMAIL_SEND', cleanEmail, false);
+          setErrorMessage(supabaseRes.error || res.error || 'Não foi possível processar a solicitação de redefinição.');
+          setIsLoading(false);
+          return;
+        }
       }
 
       recordAttempt('EMAIL_SEND', cleanEmail, true);

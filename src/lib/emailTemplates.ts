@@ -138,8 +138,9 @@ export interface PasswordResetEmailData {
 }
 
 export function generatePasswordResetEmailHtml(data: PasswordResetEmailData): { subject: string; html: string } {
-  const subject = 'FitCoach Pro: Redefinição de Senha da sua Conta';
+  const subject = 'Redefinição de Senha • FitCoach Pro';
   const name = data.userName ? `Olá, ${data.userName}!` : 'Olá!';
+  const targetUrl = data.resetUrl || '__FITCOACH_RESET_URL__';
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -179,7 +180,7 @@ export function generatePasswordResetEmailHtml(data: PasswordResetEmailData): { 
               </p>
 
               <div style="text-align: center; margin-bottom: 28px;">
-                <a href="${data.resetUrl}" style="display: inline-block; padding: 14px 32px; background-color: #10b981; color: #09090b; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 14px; box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3); text-align: center;">
+                <a href="${targetUrl}" style="display: inline-block; padding: 14px 32px; background-color: #10b981; color: #09090b; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 14px; box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3); text-align: center;">
                   Redefinir Minha Senha
                 </a>
               </div>
@@ -188,7 +189,7 @@ export function generatePasswordResetEmailHtml(data: PasswordResetEmailData): { 
                 Ou copie e cole este link no seu navegador:
               </p>
               <p style="font-size: 11px; color: #34d399; text-align: center; word-break: break-all; margin: 0;">
-                <a href="${data.resetUrl}" style="color: #34d399; text-decoration: underline;">${data.resetUrl}</a>
+                <a href="${targetUrl}" style="color: #34d399; text-decoration: underline;">${targetUrl}</a>
               </p>
             </td>
           </tr>

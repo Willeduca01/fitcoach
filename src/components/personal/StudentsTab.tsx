@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { useAppData } from '../../context/AppDataContext';
+import { useAuth } from '../../context/AuthContext';
+import { createStudentInvite } from '../../lib/supabase';
+import { sendInviteEmail } from '../../services/emailService';
 import { Student, PlanType, StudentStatus, PaymentStatus } from '../../types';
 import { Badge } from '../common/Badge';
 import { Modal } from '../common/Modal';
@@ -28,8 +31,8 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
   selectedStudentFromOutside,
   onOpenChat,
 }) => {
-
-  const { students, addStudent } = useAppData();
+  const { user } = useAuth();
+  const { students, personal, addStudent } = useAppData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPayment, setFilterPayment] = useState<'ALL' | PaymentStatus>('ALL');
@@ -38,6 +41,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
   // Form para novo aluno
   const [isNewStudentModalOpen, setIsNewStudentModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [sendInviteImmediately, setSendInviteImmediately] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('5511');
@@ -47,27 +51,56 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
   const [primaryGoal, setPrimaryGoal] = useState('Hipertrofia & Definição');
   const [notes, setNotes] = useState('');
 
-  const handleCreateStudent = (e: React.FormEvent) => {
+  const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email) return;
 
     // Avatar padrão com base em inicial ou foto pública neutra
     const avatarUrl = `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces`;
 
-    addStudent({
-      name,
-      email,
-      phone,
+    const studentToCreate = {
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
       avatarUrl,
-      status: 'ATIVO',
+      status: 'ATIVO' as StudentStatus,
       plan,
       monthlyFee,
       dueDay,
-      paymentStatus: 'EM_DIA',
+      paymentStatus: 'EM_DIA' as PaymentStatus,
       startDate: new Date().toISOString().split('T')[0],
       primaryGoal,
       notes,
-    });
+    };
+
+    await addStudent(studentToCreate);
+
+    if (sendInviteImmediately) {
+      try {
+        const personalId = user?.id || personal.id;
+        const invite = await createStudentInvite({
+          personalId,
+          targetName: name.trim(),
+          targetEmail: email.trim(),
+          plan,
+        });
+
+        const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
+        const inviteUrl = `${window.location.origin}${basePath}/#/ativar-convite?code=${invite.code}&email=${encodeURIComponent(email.trim())}`;
+
+        await sendInviteEmail({
+          toName: name.trim(),
+          toEmail: email.trim(),
+          inviteCode: invite.code,
+          inviteUrl,
+          role: 'student',
+          trainerName: personal.name || 'Personal Trainer',
+          planName: plan,
+        });
+      } catch (err) {
+        console.warn('[StudentsTab] Erro ao disparar convite automático:', err);
+      }
+    }
 
     setIsNewStudentModalOpen(false);
     setName('');
@@ -435,6 +468,22 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
               rows={2}
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
             />
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-zinc-300 flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              id="sendInviteImmediately"
+              checked={sendInviteImmediately}
+              onChange={(e) => setSendInviteImmediately(e.target.checked)}
+              className="mt-0.5 rounded border-white/20 text-emerald-500 focus:ring-emerald-500 bg-zinc-900 cursor-pointer"
+            />
+            <label htmlFor="sendInviteImmediately" className="cursor-pointer select-none">
+              <span className="font-semibold text-emerald-400 block">Enviar convite de acesso imediatamente</span>
+              <span className="text-zinc-400 text-[11px] block mt-0.5">
+                Gera o link de ativação e dispara o e-mail para o aluno cadastrar sua senha e acessar seus treinos.
+              </span>
+            </label>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">

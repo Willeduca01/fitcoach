@@ -30,12 +30,31 @@ const RootRedirect: React.FC = () => {
   return <Navigate to="/portal-aluno" replace />;
 };
 
+// Intercepta e normaliza redirecionamentos de autenticação do Supabase (recovery, tokens no hash)
+if (typeof window !== 'undefined') {
+  const hash = window.location.hash || '';
+  const search = window.location.search || '';
+
+  const isRecovery =
+    hash.includes('type=recovery') ||
+    search.includes('type=recovery') ||
+    (hash.includes('access_token=') && !hash.includes('#/dashboard') && !hash.includes('#/portal-aluno') && !hash.includes('#/master'));
+
+  if (isRecovery && !hash.startsWith('#/redefinir-senha')) {
+    const cleanTokens = hash.startsWith('#') ? hash.substring(1) : hash;
+    window.location.hash = `#/redefinir-senha?${cleanTokens}`;
+  } else if (search.includes('code=') && (!hash || hash === '#/')) {
+    window.location.hash = `#/redefinir-senha${search}`;
+  }
+}
+
 export const AppContent: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-[#09090b] text-zinc-100 font-sans transition-colors duration-200">
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
+        <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />

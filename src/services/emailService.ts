@@ -107,6 +107,7 @@ export async function sendPasswordResetEmail(data: PasswordResetEmailData): Prom
 
   try {
     const payload = JSON.stringify({
+      type: 'PASSWORD_RESET',
       to: data.toEmail,
       subject,
       html,

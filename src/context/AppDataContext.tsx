@@ -7,7 +7,8 @@ import {
   WorkoutRoutine,
   MeasurementRecord,
   SessionStatus,
-  ChatMessage
+  ChatMessage,
+  ChatMedia
 } from '../types';
 import {
   INITIAL_PERSONAL_PROFILE,
@@ -42,7 +43,7 @@ interface AppDataContextType {
   updateSessionStatus: (sessionId: string, status: SessionStatus) => Promise<void>;
   markInvoicePaid: (invoiceId: string) => Promise<void>;
   updatePersonalProfile: (profile: Partial<PersonalProfile>) => Promise<void>;
-  sendMessage: (studentId: string, senderRole: 'PERSONAL' | 'STUDENT', content: string, category?: ChatMessage['category']) => Promise<void>;
+  sendMessage: (studentId: string, senderRole: 'PERSONAL' | 'STUDENT', content: string, category?: ChatMessage['category'], media?: ChatMedia) => Promise<void>;
   markMessagesAsRead: (studentId: string, readerRole: 'PERSONAL' | 'STUDENT') => Promise<void>;
   getUnreadCountForPersonal: () => number;
   getUnreadCountForStudent: (studentId: string) => number;
@@ -168,6 +169,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const mappedStudents: Student[] = (studentsData || []).map((s) => ({
         id: s.id,
+        userId: s.user_id || undefined,
         name: s.name,
         email: s.email || '',
         phone: s.phone || '',
@@ -261,17 +263,33 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .eq('personal_id', userId)
         .order('created_at', { ascending: true });
 
-      const mappedMessages: ChatMessage[] = (messagesData || []).map((m) => ({
-        id: m.id,
-        senderRole: m.sender_role,
-        senderId: m.sender_id,
-        senderName: m.sender_name,
-        studentId: m.student_id,
-        content: m.content,
-        timestamp: new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        read: m.read,
-        category: m.category,
-      }));
+      const mappedMessages: ChatMessage[] = (messagesData || []).map((m) => {
+        let parsedContent = m.content;
+        let parsedMedia: ChatMedia | undefined = undefined;
+
+        if (typeof m.content === 'string' && m.content.startsWith('__FC_MEDIA__')) {
+          try {
+            const parsed = JSON.parse(m.content.substring(12));
+            parsedContent = parsed.text || '';
+            parsedMedia = parsed.media;
+          } catch (e) {
+            parsedContent = m.content;
+          }
+        }
+
+        return {
+          id: m.id,
+          senderRole: m.sender_role,
+          senderId: m.sender_id,
+          senderName: m.sender_name,
+          studentId: m.student_id,
+          content: parsedContent,
+          media: parsedMedia,
+          timestamp: new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          read: m.read,
+          category: m.category,
+        };
+      });
       setMessages(mappedMessages);
     } catch (err) {
       console.error('[AppDataContext] Erro ao carregar dados do Supabase:', err);
@@ -729,12 +747,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     studentId: string,
     senderRole: 'PERSONAL' | 'STUDENT',
     content: string,
-    category?: ChatMessage['category']
+    category?: ChatMessage['category'],
+    media?: ChatMedia
   ) => {
     const student = students.find(s => s.id === studentId);
     const now = new Date();
     const timeStr = 'Hoje ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     let msgId = `msg-${Date.now()}`;
+
+    // Se houver mídia, serializa o conteúdo para armazenar na coluna content
+    const dbContent = media
+      ? '__FC_MEDIA__' + JSON.stringify({ text: content, media })
+      : content;
 
     if (!isDemoMode && user) {
       try {
@@ -744,7 +768,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
           sender_role: senderRole,
           sender_id: senderRole === 'PERSONAL' ? user.id : studentId,
           sender_name: senderRole === 'PERSONAL' ? personal.name : (student?.name || 'Aluno'),
-          content,
+          content: dbContent,
           category: category || 'GERAL',
           read: false,
         }).select().single();
@@ -761,6 +785,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       senderName: senderRole === 'PERSONAL' ? personal.name : (student?.name || 'Aluno'),
       studentId,
       content,
+      media,
       timestamp: timeStr,
       read: false,
       category: category || 'GERAL'

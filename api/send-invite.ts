@@ -1,4 +1,4 @@
-// Serverless API Handler para Vercel com Rate Limiting e Headers de Segurança
+import nodemailer from 'nodemailer';
 
 // Cache em memória para rastreamento de requisições na borda/servidor
 const rateLimitMap = new Map<string, number[]>();
@@ -47,7 +47,9 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const { to, subject, html } = req.body || {};
+  const { to, subject, type } = req.body || {};
+  let html = req.body?.html;
+
   if (!to || !html) {
     return res.status(400).json({ error: 'Campos to e html são obrigatórios' });
   }
@@ -62,9 +64,70 @@ export default async function handler(req: any, res: any) {
     });
   }
 
+  // Se for redefinição de senha, gera o link seguro com token criptográfico do Supabase
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://xmpbzpdggsonzftueynw.supabase.co';
+
+  if (type === 'PASSWORD_RESET' && serviceRoleKey) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+      const origin = req.headers.origin || 'https://fitcoach-crm.vercel.app';
+      const basePath = process.env.VERCEL ? '' : '/fitcoach';
+      const redirectTo = `${origin}${basePath}/#/redefinir-senha`;
+
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: cleanTo,
+        options: { redirectTo },
+      });
+
+      if (!linkError && linkData?.properties?.action_link) {
+        const actionLink = linkData.properties.action_link;
+        console.log('[API Send Invite] Link de recuperação oficial gerado:', actionLink);
+        html = html.replaceAll('__FITCOACH_RESET_URL__', actionLink);
+        html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, actionLink);
+        html = html.replace(/href=""/g, `href="${actionLink}"`);
+        html = html.replace(/href=''/g, `href='${actionLink}'`);
+      }
+    } catch (adminErr) {
+      console.warn('[API Send Invite] Erro Supabase Admin generateLink:', adminErr);
+    }
+  }
+
+  // Prioridade 1: Gmail SMTP
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: gmailUser,
+          pass: gmailPass.replace(/\s+/g, ''),
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: `"FitCoach Pro" <${gmailUser}>`,
+        to: cleanTo,
+        subject: subject || 'Convite de Acesso • FitCoach Pro',
+        html,
+      });
+
+      return res.status(200).json({ success: true, messageId: info.messageId });
+    } catch (err: any) {
+      console.error('[API Send Invite] Erro Gmail SMTP:', err);
+      return res.status(500).json({ error: err.message || 'Falha ao enviar e-mail via Gmail SMTP.' });
+    }
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'RESEND_API_KEY não configurada no ambiente do servidor.' });
+    return res.status(500).json({ error: 'Nenhum provedor de e-mail configurado (GMAIL_USER ou RESEND_API_KEY).' });
   }
 
   try {
