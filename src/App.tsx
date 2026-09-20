@@ -13,7 +13,19 @@ import { MasterDashboardPage } from './pages/MasterDashboardPage';
 import { QuickSwitcher } from './components/common/QuickSwitcher';
 
 const RootRedirect: React.FC = () => {
-  const { role, isAuthenticated } = useAuth();
+  const { role, isAuthenticated, isPasswordRecovery } = useAuth();
+
+  const isRecovery =
+    isPasswordRecovery ||
+    (typeof window !== 'undefined' && (
+      sessionStorage.getItem('fitcoach_password_recovery') === 'true' ||
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery')
+    ));
+
+  if (isRecovery) {
+    return <Navigate to="/redefinir-senha" replace />;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -27,7 +39,11 @@ const RootRedirect: React.FC = () => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Navigate to="/portal-aluno" replace />;
+  if (role === 'STUDENT') {
+    return <Navigate to="/portal-aluno" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
 };
 
 // Intercepta e normaliza redirecionamentos de autenticação do Supabase (recovery, tokens no hash)
@@ -38,11 +54,14 @@ if (typeof window !== 'undefined') {
   const isRecovery =
     hash.includes('type=recovery') ||
     search.includes('type=recovery') ||
-    (hash.includes('access_token=') && !hash.includes('#/dashboard') && !hash.includes('#/portal-aluno') && !hash.includes('#/master'));
+    sessionStorage.getItem('fitcoach_password_recovery') === 'true';
 
-  if (isRecovery && !hash.startsWith('#/redefinir-senha')) {
-    const cleanTokens = hash.startsWith('#') ? hash.substring(1) : hash;
-    window.location.hash = `#/redefinir-senha?${cleanTokens}`;
+  if (isRecovery) {
+    sessionStorage.setItem('fitcoach_password_recovery', 'true');
+    if (!hash.startsWith('#/redefinir-senha')) {
+      const cleanTokens = hash.startsWith('#') ? hash.substring(1) : hash;
+      window.location.hash = cleanTokens ? `#/redefinir-senha?${cleanTokens}` : '#/redefinir-senha';
+    }
   } else if (search.includes('code=') && (!hash || hash === '#/')) {
     window.location.hash = `#/redefinir-senha${search}`;
   }

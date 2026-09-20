@@ -24,6 +24,7 @@ interface AuthContextType {
   sendPasswordResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   isAuthenticated: boolean;
+  isPasswordRecovery: boolean;
 }
 
 const AUTH_STORAGE_KEY = 'fitcoach_auth_session';
@@ -61,6 +62,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      const inStorage = sessionStorage.getItem('fitcoach_password_recovery') === 'true';
+      return inStorage || hash.includes('type=recovery') || search.includes('type=recovery');
+    }
+    return false;
+  });
+
   // Monitorar autenticação do Supabase
   useEffect(() => {
     // 1. Pega a sessão inicial
@@ -74,10 +85,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // 2. Escuta mudanças de auth (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // 2. Escuta mudanças de auth (login, logout, token refresh, password recovery)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+        sessionStorage.setItem('fitcoach_password_recovery', 'true');
+        window.location.hash = '#/redefinir-senha';
+        setLoading(false);
+        return;
+      }
+
       if (newSession?.user) {
         await syncUserProfile(newSession.user.id);
       } else {
@@ -225,6 +245,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(null);
     setRole(null);
     setCurrentStudentId(null);
+    setIsPasswordRecovery(false);
+    sessionStorage.removeItem('fitcoach_password_recovery');
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
@@ -267,6 +289,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: error.message };
       }
 
+      setIsPasswordRecovery(false);
+      sessionStorage.removeItem('fitcoach_password_recovery');
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Erro ao atualizar a senha.' };
@@ -289,7 +313,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchRole,
         sendPasswordResetEmail,
         updatePassword,
-        isAuthenticated: !!role || !!user,
+        isAuthenticated: !!session || !!user,
+        isPasswordRecovery,
       }}
     >
       {children}

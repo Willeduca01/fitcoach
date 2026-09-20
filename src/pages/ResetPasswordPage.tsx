@@ -213,6 +213,7 @@ export const ResetPasswordPage: React.FC = () => {
         return;
       }
 
+      sessionStorage.removeItem('fitcoach_password_recovery');
       setIsSuccess(true);
       confetti({
         particleCount: 90,

@@ -72,9 +72,9 @@ export default async function handler(req: any, res: any) {
     try {
       const { createClient } = await import('@supabase/supabase-js');
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-      const origin = req.headers.origin || 'https://fitcoach-crm.vercel.app';
+      const origin = req.headers.origin || 'https://fitcoach-willtec.vercel.app';
       const basePath = process.env.VERCEL ? '' : '/fitcoach';
-      const redirectTo = `${origin}${basePath}/#/redefinir-senha`;
+      const redirectTo = `${origin}${basePath}/?type=recovery`;
 
       const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
         type: 'recovery',

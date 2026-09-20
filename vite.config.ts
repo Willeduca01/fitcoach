@@ -45,7 +45,7 @@ function emailServerPlugin(): Plugin {
                   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
                   const origin = req.headers.origin || 'http://localhost:5173';
                   const basePath = '/fitcoach';
-                  const redirectTo = `${origin}${basePath}/#/redefinir-senha`;
+                  const redirectTo = `${origin}${basePath}/?type=recovery`;
 
                   const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
                     type: 'recovery',
