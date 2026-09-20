@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { Navigate, Link, useNavigate } from 'react-router-dom';
-import { ShieldAlert, KeyRound, LogOut, ArrowRight } from 'lucide-react';
+import { ShieldAlert, KeyRound, LogOut, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
 import { StudentLayout, StudentTab } from '../components/student/StudentLayout';
 import { StudentHomeTab } from '../components/student/StudentHomeTab';
 import { WorkoutTrackerTab } from '../components/student/WorkoutTrackerTab';
@@ -11,9 +11,10 @@ import { PaymentTab } from '../components/student/PaymentTab';
 import { ContactTab } from '../components/student/ContactTab';
 
 export const StudentPortalPage: React.FC = () => {
-  const { role, currentStudentId, logout, isPasswordRecovery } = useAuth();
-  const { students, isDemoMode } = useAppData();
+  const { role, currentStudentId, user, logout, isPasswordRecovery } = useAuth();
+  const { students, isDemoMode, isLoadingData } = useAppData();
   const [currentTab, setCurrentTab] = useState<StudentTab>('home');
+  const [isLinking, setIsLinking] = useState(false);
   const navigate = useNavigate();
 
   // Se o usuário estiver em fluxo de redefinição de senha, redireciona imediatamente para a tela correta
@@ -31,6 +32,55 @@ export const StudentPortalPage: React.FC = () => {
   }
 
   const activeStudent = students.find((s) => s.id === currentStudentId) || students[0];
+
+  // Tentativa automática de vincular a conta do aluno ao carregar se não houver aluno ativo
+  useEffect(() => {
+    let isCancelled = false;
+    if (!activeStudent && user?.id && user?.email && !isLoadingData) {
+      setIsLinking(true);
+      fetch('/api/link-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, email: user.email }),
+      })
+        .then((res) => {
+          if (!res || res.status === 404) {
+            return fetch('/fitcoach/api/link-student', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: user.id, email: user.email }),
+            });
+          }
+          return res;
+        })
+        .then((res) => res?.json())
+        .then((data) => {
+          if (!isCancelled && data?.success) {
+            window.location.reload();
+          }
+        })
+        .catch((err) => {
+          console.warn('[StudentPortalPage] Auto-link falhou:', err);
+        })
+        .finally(() => {
+          if (!isCancelled) setIsLinking(false);
+        });
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeStudent, user?.id, user?.email, isLoadingData]);
+
+  if (isLoadingData || isLinking) {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="space-y-4">
+          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
+          <p className="text-xs text-zinc-400">Carregando seus treinos e ficha de aluno...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!activeStudent) {
     return (

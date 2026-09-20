@@ -117,57 +117,142 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   // Carregar dados reais do Supabase quando o usuário for um treinador real autenticado
+  // Carregar dados reais do Supabase quando o usuário for autenticado
   const loadRealUserData = useCallback(async (userId: string) => {
     try {
       setIsLoadingData(true);
 
-      // 1. Perfil do Treinador
+      // 1. Perfil do Usuário
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      const { data: personalProfile } = await supabase
-        .from('personal_profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const isStudent = profile?.role === 'STUDENT';
 
-      if (profile) {
-        setPersonal({
-          id: userId,
-          name: profile.name || user?.user_metadata?.name || 'Personal Trainer',
-          title: personalProfile?.title || 'Personal Trainer & Consultor Fitness',
-          email: profile.email || user?.email || '',
-          phone: profile.phone || '',
-          avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-          pixKey: personalProfile?.pix_key || '',
-          pixType: (personalProfile?.pix_type as any) || 'EMAIL',
-          cref: personalProfile?.cref || 'Não informado',
-          bio: personalProfile?.bio || '',
-        });
+      let studentsData: any[] = [];
+      let studentPersonalId: string | null = null;
+
+      if (isStudent) {
+        // Aluno autenticado: busca sua própria ficha por user_id
+        let { data: myStudent } = await supabase
+          .from('students')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        // Se ainda não estiver vinculado na coluna user_id, vincula via API
+        if (!myStudent && user?.email) {
+          try {
+            let linkRes = await fetch('/api/link-student', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, email: user.email }),
+            }).catch(() => null);
+
+            if (!linkRes || linkRes.status === 404) {
+              linkRes = await fetch('/fitcoach/api/link-student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, email: user.email }),
+              }).catch(() => null);
+            }
+
+            if (linkRes && linkRes.ok) {
+              const { data: refetched } = await supabase
+                .from('students')
+                .select('*')
+                .eq('user_id', userId)
+                .maybeSingle();
+              myStudent = refetched;
+            }
+          } catch (e) {
+            console.warn('[AppDataContext] Falha ao vincular aluno automaticamente:', e);
+          }
+        }
+
+        if (myStudent) {
+          studentsData = [myStudent];
+          studentPersonalId = myStudent.personal_id;
+
+          // Busca dados do Personal Trainer do aluno para preencher o perfil do treinador
+          if (studentPersonalId) {
+            const { data: trainerProfile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', studentPersonalId)
+              .maybeSingle();
+
+            const { data: trainerPersonal } = await supabase
+              .from('personal_profiles')
+              .select('*')
+              .eq('id', studentPersonalId)
+              .maybeSingle();
+
+            if (trainerProfile) {
+              setPersonal({
+                id: studentPersonalId,
+                name: trainerProfile.name || 'Personal Trainer',
+                title: trainerPersonal?.title || 'Personal Trainer & Consultor Fitness',
+                email: trainerProfile.email || '',
+                phone: trainerProfile.phone || '',
+                avatarUrl: trainerProfile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+                pixKey: trainerPersonal?.pix_key || '',
+                pixType: (trainerPersonal?.pix_type as any) || 'EMAIL',
+                cref: trainerPersonal?.cref || 'Não informado',
+                bio: trainerPersonal?.bio || '',
+              });
+            }
+          }
+        }
+      } else {
+        // Usuário é Personal Trainer ou Master: busca perfil profissional
+        const { data: personalProfile } = await supabase
+          .from('personal_profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profile) {
+          setPersonal({
+            id: userId,
+            name: profile.name || user?.user_metadata?.name || 'Personal Trainer',
+            title: personalProfile?.title || 'Personal Trainer & Consultor Fitness',
+            email: profile.email || user?.email || '',
+            phone: profile.phone || '',
+            avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+            pixKey: personalProfile?.pix_key || '',
+            pixType: (personalProfile?.pix_type as any) || 'EMAIL',
+            cref: personalProfile?.cref || 'Não informado',
+            bio: personalProfile?.bio || '',
+          });
+        }
+
+        // Busca todos os alunos deste treinador
+        const { data: trainerStudents } = await supabase
+          .from('students')
+          .select('*')
+          .eq('personal_id', userId)
+          .order('created_at', { ascending: false });
+
+        studentsData = trainerStudents || [];
       }
 
-      // 2. Alunos do Treinador
-      const { data: studentsData } = await supabase
-        .from('students')
-        .select('*')
-        .eq('personal_id', userId)
-        .order('created_at', { ascending: false });
+      const activeStudentId = isStudent ? studentsData[0]?.id : null;
 
       // Treinos e Avaliações
-      const { data: workoutsData } = await supabase
-        .from('workouts')
-        .select('*')
-        .eq('personal_id', userId);
+      const workoutsQuery = isStudent && activeStudentId
+        ? supabase.from('workouts').select('*').eq('student_id', activeStudentId)
+        : supabase.from('workouts').select('*').eq('personal_id', userId);
+      const { data: workoutsData } = await workoutsQuery;
 
-      const { data: assessmentsData } = await supabase
-        .from('physical_assessments')
-        .select('*')
-        .eq('personal_id', userId);
+      const assessmentsQuery = isStudent && activeStudentId
+        ? supabase.from('physical_assessments').select('*').eq('student_id', activeStudentId)
+        : supabase.from('physical_assessments').select('*').eq('personal_id', userId);
+      const { data: assessmentsData } = await assessmentsQuery;
 
-      const mappedStudents: Student[] = (studentsData || []).map((s) => ({
+      const mappedStudents: Student[] = studentsData.map((s) => ({
         id: s.id,
         userId: s.user_id || undefined,
         name: s.name,
@@ -211,11 +296,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setStudents(mappedStudents);
 
       // 3. Faturas
-      const { data: invoicesData } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('personal_id', userId)
-        .order('due_date', { ascending: false });
+      const invoicesQuery = isStudent && activeStudentId
+        ? supabase.from('invoices').select('*').eq('student_id', activeStudentId).order('due_date', { ascending: false })
+        : supabase.from('invoices').select('*').eq('personal_id', userId).order('due_date', { ascending: false });
+      const { data: invoicesData } = await invoicesQuery;
 
       const mappedInvoices: Invoice[] = (invoicesData || []).map((inv) => {
         const student = (studentsData || []).find((s) => s.id === inv.student_id);
@@ -233,11 +317,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setInvoices(mappedInvoices);
 
       // 4. Sessões
-      const { data: sessionsData } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('personal_id', userId)
-        .order('date', { ascending: true });
+      const sessionsQuery = isStudent && activeStudentId
+        ? supabase.from('sessions').select('*').eq('student_id', activeStudentId).order('date', { ascending: true })
+        : supabase.from('sessions').select('*').eq('personal_id', userId).order('date', { ascending: true });
+      const { data: sessionsData } = await sessionsQuery;
 
       const mappedSessions: SessionSchedule[] = (sessionsData || []).map((sess) => {
         const student = (studentsData || []).find((s) => s.id === sess.student_id);
@@ -257,11 +340,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setSessions(mappedSessions);
 
       // 5. Mensagens
-      const { data: messagesData } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('personal_id', userId)
-        .order('created_at', { ascending: true });
+      const messagesQuery = isStudent && activeStudentId
+        ? supabase.from('messages').select('*').eq('student_id', activeStudentId).order('created_at', { ascending: true })
+        : supabase.from('messages').select('*').eq('personal_id', userId).order('created_at', { ascending: true });
+      const { data: messagesData } = await messagesQuery;
 
       const mappedMessages: ChatMessage[] = (messagesData || []).map((m) => {
         let parsedContent = m.content;

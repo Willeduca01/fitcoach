@@ -135,6 +135,92 @@ function emailServerPlugin(): Plugin {
           return;
         }
 
+        // Middleware de vinculação de aluno pré-cadastrado no CRM
+        if (req.method === 'POST' && (url === '/api/link-student' || url === '/fitcoach/api/link-student')) {
+          let bodyStr = '';
+          req.on('data', (chunk) => {
+            bodyStr += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              const { userId, email } = body;
+              if (!userId || !email) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'userId e email são obrigatórios.' }));
+                return;
+              }
+
+              if (!serviceRoleKey) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurada.' }));
+                return;
+              }
+
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+              const cleanEmail = email.trim().toLowerCase();
+
+              const { data: existingStudent, error: findError } = await supabaseAdmin
+                .from('students')
+                .select('id, name, user_id, personal_id')
+                .ilike('email', cleanEmail)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (findError) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: findError.message }));
+                return;
+              }
+
+              if (!existingStudent) {
+                res.statusCode = 404;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Nenhuma ficha de aluno encontrada com este e-mail.' }));
+                return;
+              }
+
+              const { error: updateError } = await supabaseAdmin
+                .from('students')
+                .update({ user_id: userId, updated_at: new Date().toISOString() })
+                .eq('id', existingStudent.id);
+
+              if (updateError) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: updateError.message }));
+                return;
+              }
+
+              await supabaseAdmin
+                .from('profiles')
+                .update({ role: 'STUDENT' })
+                .eq('id', userId);
+
+              console.log(`[vite:link-student] Aluno ${existingStudent.name} vinculado com sucesso ao user_id ${userId}`);
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: true,
+                studentId: existingStudent.id,
+                personalId: existingStudent.personal_id,
+                name: existingStudent.name,
+              }));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message || 'Erro ao vincular aluno.' }));
+            }
+          });
+          return;
+        }
+
         // Middleware de Rate Limiting por IP local
         if (url === '/api/rate-limit' || url === '/fitcoach/api/rate-limit') {
           const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1')

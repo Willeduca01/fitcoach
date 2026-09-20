@@ -126,11 +126,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (userRole === 'STUDENT') {
           // Busca o id do estudante na tabela students
-          const { data: studentRecord } = await supabase
+          let studentRecord: { id: string } | null = null;
+          const { data: directRecord } = await supabase
             .from('students')
             .select('id')
             .eq('user_id', userId)
             .maybeSingle();
+
+          if (directRecord) {
+            studentRecord = directRecord;
+          } else {
+            // Se não encontrou por user_id, tenta vincular via API com service role
+            const { data: authUser } = await supabase.auth.getUser();
+            const userEmail = authUser?.user?.email;
+            if (userEmail) {
+              try {
+                let linkRes = await fetch('/api/link-student', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId, email: userEmail }),
+                }).catch(() => null);
+
+                if (!linkRes || linkRes.status === 404) {
+                  linkRes = await fetch('/fitcoach/api/link-student', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, email: userEmail }),
+                  }).catch(() => null);
+                }
+
+                if (linkRes && linkRes.ok) {
+                  const linkJson = await linkRes.json();
+                  if (linkJson?.studentId) {
+                    studentRecord = { id: linkJson.studentId };
+                  }
+                }
+              } catch (linkErr) {
+                console.warn('[AuthContext] Falha ao vincular aluno via API:', linkErr);
+              }
+            }
+          }
 
           if (studentRecord) {
             setCurrentStudentId(studentRecord.id);
