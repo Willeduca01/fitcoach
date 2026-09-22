@@ -228,7 +228,7 @@ export function recordAttempt(
       fetch(`${basePath}/api/rate-limit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, op: 'success' }),
+        body: JSON.stringify({ action, op: 'success', identifier: specificKey }),
       }).catch(() => null);
     } catch {}
 

@@ -7,6 +7,10 @@
       "source": "/(.*)",
       "headers": [
         {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://*.amazonaws.com https:; media-src 'self' data: blob: https://*.supabase.co https://*.amazonaws.com https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://api64.ipify.org https://api.ipify.org https://*.amazonaws.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+        },
+        {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
         },
@@ -16,7 +20,7 @@
         },
         {
           "key": "X-XSS-Protection",
-          "value": "1; mode=block"
+          "value": "0"
         },
         {
           "key": "Referrer-Policy",
@@ -34,6 +38,18 @@
         {
           "key": "Cache-Control",
           "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; frame-ancestors 'none';"
         }
       ]
     }
@@ -42,6 +58,18 @@
     {
       "source": "/api/send-invite",
       "destination": "/api/send-invite"
+    },
+    {
+      "source": "/api/link-student",
+      "destination": "/api/link-student"
+    },
+    {
+      "source": "/api/rate-limit",
+      "destination": "/api/rate-limit"
+    },
+    {
+      "source": "/api/verify-captcha",
+      "destination": "/api/verify-captcha"
     },
     {
       "source": "/(.*)",

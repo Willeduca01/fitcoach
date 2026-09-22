@@ -10,6 +10,8 @@ import {
   subscribeToRateLimit,
   formatSecondsToTime
 } from '../lib/rateLimiter';
+import { TurnstileCaptcha } from '../components/common/TurnstileCaptcha';
+import { verifyTurnstileToken } from '../lib/captcha';
 import {
   Dumbbell,
   ShieldCheck,
@@ -44,6 +46,9 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+  const [captchaToken, setCaptchaToken] = useState<string>('');
+  const [remainingAttempts, setRemainingAttempts] = useState<number>(5);
 
   // UI States
   const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id || 'student-1');
@@ -54,6 +59,7 @@ export const LoginPage: React.FC = () => {
   useEffect(() => {
     const updateLockout = () => {
       const status = checkRateLimit('LOGIN', email);
+      setRemainingAttempts(status.remainingAttempts);
       if (!status.allowed) {
         setLockoutSeconds(status.lockoutSeconds);
       } else {
@@ -66,6 +72,7 @@ export const LoginPage: React.FC = () => {
 
     // Sincroniza com o servidor em background para checar bloqueio por IP real
     syncServerRateLimit('LOGIN', email).then((serverStatus) => {
+      setRemainingAttempts(serverStatus.remainingAttempts);
       if (!serverStatus.allowed) {
         setLockoutSeconds(serverStatus.lockoutSeconds);
       }
@@ -75,6 +82,8 @@ export const LoginPage: React.FC = () => {
     const unsubscribe = subscribeToRateLimit(updateLockout);
     return () => unsubscribe();
   }, [email]);
+
+  const isCaptchaRequired = lockoutSeconds === 0 && (failedAttempts >= 2 || (remainingAttempts <= 3 && remainingAttempts > 0));
 
   // Contador regressivo em tempo real durante o bloqueio
   useEffect(() => {
@@ -117,8 +126,24 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
+    // 3. Verificação de CAPTCHA se o modo de segurança adaptativo estiver ativo
+    if (isCaptchaRequired && !captchaToken) {
+      setErrorMessage('Por favor, complete a verificação anti-bot abaixo para continuar.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage('');
+
+    if (isCaptchaRequired && captchaToken) {
+      const captchaCheck = await verifyTurnstileToken(captchaToken);
+      if (!captchaCheck.success) {
+        setErrorMessage(captchaCheck.error || 'Falha na validação anti-bot. Tente novamente.');
+        setCaptchaToken('');
+        setIsLoading(false);
+        return;
+      }
+    }
 
     const isDemoLogin = cleanEmail === 'teste@fitcoach.com.br';
     if (isDemoLogin) {
@@ -128,11 +153,13 @@ export const LoginPage: React.FC = () => {
     }
 
     try {
-      // 2. Redirecionamento forçado para o Desenvolvedor Master
+      // Redirecionamento para o Desenvolvedor Master
       if (cleanEmail === 'dev.dev@fitcoach.com.br') {
         const result = await loginWithPassword(cleanEmail, password);
         if (!result.success) {
           const afterAttempt = recordAttempt('LOGIN', cleanEmail, false);
+          setFailedAttempts((prev) => prev + 1);
+          setCaptchaToken('');
           if (!afterAttempt.allowed) {
             setLockoutSeconds(afterAttempt.lockoutSeconds);
             setErrorMessage(`Limite de tentativas excedido! Bloqueado temporariamente por ${formatSecondsToTime(afterAttempt.lockoutSeconds)}.`);
@@ -143,13 +170,17 @@ export const LoginPage: React.FC = () => {
           return;
         }
         recordAttempt('LOGIN', cleanEmail, true);
+        setFailedAttempts(0);
+        setCaptchaToken('');
         navigate('/master');
         return;
       }
 
-      // 3. Login com a Conta Demo Oficial (Teste@fitcoach / Contademo)
+      // Login com a Conta Demo Oficial (Teste@fitcoach / Contademo)
       if (isDemoLogin && password === 'Contademo') {
         recordAttempt('LOGIN', cleanEmail, true);
+        setFailedAttempts(0);
+        setCaptchaToken('');
         const result = await loginWithPassword('teste@fitcoach.com.br', 'Contademo');
         if (result.success) {
           navigate('/dashboard');
@@ -160,10 +191,12 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // 4. Login de Professor Real ou Aluno Real via Supabase
+      // Login de Professor Real ou Aluno Real via Supabase
       const result = await loginWithPassword(cleanEmail, password);
       if (!result.success) {
         const afterAttempt = recordAttempt('LOGIN', cleanEmail, false);
+        setFailedAttempts((prev) => prev + 1);
+        setCaptchaToken('');
         if (!afterAttempt.allowed) {
           setLockoutSeconds(afterAttempt.lockoutSeconds);
           setErrorMessage(`Limite de tentativas de login excedido! Por segurança, sua conta foi temporariamente suspensa por ${formatSecondsToTime(afterAttempt.lockoutSeconds)}.`);
@@ -174,8 +207,10 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // Login bem-sucedido: zera o contador de falhas
+      // Login bem-sucedido: zera o contador de falhas e estados de captcha
       recordAttempt('LOGIN', cleanEmail, true);
+      setFailedAttempts(0);
+      setCaptchaToken('');
 
       // Redireciona com base no papel detectado
       const targetRole = result.role || role;
@@ -188,6 +223,8 @@ export const LoginPage: React.FC = () => {
       }
     } catch (err: any) {
       recordAttempt('LOGIN', cleanEmail, false);
+      setFailedAttempts((prev) => prev + 1);
+      setCaptchaToken('');
       setErrorMessage(err.message || 'Erro ao realizar login.');
       setIsLoading(false);
     }
@@ -311,6 +348,20 @@ export const LoginPage: React.FC = () => {
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {isCaptchaRequired && lockoutSeconds === 0 && (
+              <div className="p-3 rounded-2xl bg-zinc-950/70 border border-white/[0.08] my-2">
+                <TurnstileCaptcha
+                  action="login"
+                  onVerify={(token) => {
+                    setCaptchaToken(token);
+                    setErrorMessage('');
+                  }}
+                  onExpire={() => setCaptchaToken('')}
+                  onError={(err) => setErrorMessage(err || 'Erro ao validar desafio anti-bot.')}
+                />
               </div>
             )}
 

@@ -8,6 +8,7 @@ import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
 import { WorkoutBuilder } from './WorkoutBuilder';
 import { PhysicalAssessment } from './PhysicalAssessment';
+import { sanitizeUrl } from '../../lib/security';
 import {
   User,
   Dumbbell,
@@ -180,7 +181,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       const targetUrl = cleanPhone
         ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
         : `https://api.whatsapp.com/send?text=${encoded}`;
-      window.open(targetUrl, '_blank');
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       setInviteFeedback({ type: 'error', message: err.message || 'Erro ao preparar link para WhatsApp.' });
     } finally {
@@ -240,7 +241,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         <div className="p-4 rounded-2xl bg-zinc-950/60 border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <img
-              src={student.avatarUrl}
+              src={sanitizeUrl(student.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
               alt={student.name}
               className="w-12 h-12 rounded-full object-cover ring-2 ring-emerald-500/40 shrink-0"
             />

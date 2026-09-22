@@ -13,8 +13,10 @@ import {
   CheckCheck,
   Check,
   Sparkles,
+  ExternalLink,
   Paperclip
 } from 'lucide-react';
+import { sanitizeUrl } from '../../lib/security';
 
 interface ContactTabProps {
   student: Student;
@@ -84,7 +86,7 @@ export const ContactTab: React.FC<ContactTabProps> = ({ student }) => {
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
-              src={personal.avatarUrl}
+              src={sanitizeUrl(personal.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
               alt={personal.name}
               className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/30"
             />

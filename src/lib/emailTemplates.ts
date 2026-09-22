@@ -14,29 +14,39 @@ export interface InviteEmailData {
   expiresInDays?: number;
 }
 
+import { escapeHtml, sanitizeUrl } from './security';
+
+export { escapeHtml, sanitizeUrl };
+
 export function generateInviteEmailHtml(data: InviteEmailData): { subject: string; html: string } {
   const isTrainer = data.role === 'trainer' || data.role === 'PERSONAL';
   const accentColor = isTrainer ? '#f59e0b' : '#10b981';
   const accentLight = isTrainer ? '#fbbf24' : '#34d399';
   const expiresIn = data.expiresInDays || 14;
 
+  const safeToName = escapeHtml(data.toName);
+  const safeTrainerName = escapeHtml(data.trainerName || 'Seu Treinador');
+  const safeInviteCode = escapeHtml(data.inviteCode);
+  const safePlanName = escapeHtml(data.planName);
+  const safeInviteUrl = sanitizeUrl(data.inviteUrl);
+
   const subject = isTrainer
-    ? `FitCoach Pro: Seu convite de Treinador chegou! (Código: ${data.inviteCode})`
-    : `FitCoach Pro: ${data.trainerName || 'Seu Treinador'} convidou você para treinar!`;
+    ? `FitCoach Pro: Seu convite de Treinador chegou! (Código: ${safeInviteCode})`
+    : `FitCoach Pro: ${safeTrainerName} convidou você para treinar!`;
 
   const headerBadgeText = isTrainer
     ? 'CONVITE EXCLUSIVO PARA TREINADOR'
     : 'CONVITE DE ALUNO VINCULADO';
 
-  const welcomeHeading = `Olá, ${data.toName}!`;
+  const welcomeHeading = `Olá, ${safeToName}!`;
 
   const leadParagraph = isTrainer
     ? 'Você foi convidado pelo <strong>Desenvolvedor / Administrador Master</strong> para gerenciar seus alunos, prescrever treinos inteligentes e acompanhar métricas no <strong>FitCoach Pro</strong>.'
-    : `Seu Personal Trainer <strong>${data.trainerName || 'Personal Trainer'}</strong> preparou seu acesso exclusivo no <strong>FitCoach Pro</strong> para você acessar seus treinos, avaliações físicas e evolução em tempo real.`;
+    : `Seu Personal Trainer <strong>${safeTrainerName}</strong> preparou seu acesso exclusivo no <strong>FitCoach Pro</strong> para você acessar seus treinos, avaliações físicas e evolução em tempo real.`;
 
-  const planInfo = data.planName
+  const planInfo = safePlanName
     ? `<div style="margin-top: 12px; padding: 10px 16px; background-color: #27272a; border-radius: 8px; font-size: 13px; color: #a1a1aa;">
-        Plano Vinculado: <strong style="color: #ffffff;">${data.planName}</strong>
+        Plano Vinculado: <strong style="color: #ffffff;">${safePlanName}</strong>
        </div>`
     : '';
 
@@ -79,7 +89,7 @@ export function generateInviteEmailHtml(data: InviteEmailData): { subject: strin
                   Seu Código de Autorização
                 </div>
                 <div style="font-family: Consolas, 'Liberation Mono', Courier, monospace; font-size: 26px; font-weight: 800; color: ${accentLight}; letter-spacing: 3px;">
-                  ${data.inviteCode}
+                  ${safeInviteCode}
                 </div>
                 <div style="font-size: 11px; color: #71717a; margin-top: 8px;">
                   Válido por ${expiresIn} dias • Acesso único
@@ -89,7 +99,7 @@ export function generateInviteEmailHtml(data: InviteEmailData): { subject: strin
               <table cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td align="center">
-                    <a href="${data.inviteUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; padding: 16px 28px; background-color: ${accentColor}; color: #09090b !important; text-decoration: none; font-weight: 700; font-size: 15px; border-radius: 14px; text-align: center;">
+                    <a href="${safeInviteUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; padding: 16px 28px; background-color: ${accentColor}; color: #09090b !important; text-decoration: none; font-weight: 700; font-size: 15px; border-radius: 14px; text-align: center;">
                       ${isTrainer ? 'Ativar Minha Conta de Treinador' : 'Ativar Meu Acesso FitCoach'} →
                     </a>
                   </td>
@@ -98,7 +108,7 @@ export function generateInviteEmailHtml(data: InviteEmailData): { subject: strin
 
               <p style="margin: 24px 0 0 0; font-size: 12px; color: #a1a1aa; line-height: 1.5; text-align: center;">
                 Ou acesse diretamente pelo link:<br>
-                <a href="${data.inviteUrl}" style="color: ${accentLight}; text-decoration: underline; word-break: break-all;">${data.inviteUrl}</a>
+                <a href="${safeInviteUrl}" style="color: ${accentLight}; text-decoration: underline; word-break: break-all;">${safeInviteUrl}</a>
               </p>
             </td>
           </tr>
@@ -139,8 +149,8 @@ export interface PasswordResetEmailData {
 
 export function generatePasswordResetEmailHtml(data: PasswordResetEmailData): { subject: string; html: string } {
   const subject = 'Redefinição de Senha • FitCoach Pro';
-  const name = data.userName ? `Olá, ${data.userName}!` : 'Olá!';
-  const targetUrl = data.resetUrl || '__FITCOACH_RESET_URL__';
+  const safeName = data.userName ? `Olá, ${escapeHtml(data.userName)}!` : 'Olá!';
+  const targetUrl = sanitizeUrl(data.resetUrl);
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -170,7 +180,7 @@ export function generatePasswordResetEmailHtml(data: PasswordResetEmailData): { 
           <tr>
             <td style="padding: 32px 36px 20px 36px;">
               <h1 style="font-size: 22px; font-weight: 700; color: #ffffff; margin: 0 0 16px 0; letter-spacing: -0.3px;">
-                ${name}
+                ${safeName}
               </h1>
               <p style="font-size: 15px; line-height: 1.6; color: #d4d4d8; margin: 0 0 24px 0;">
                 Recebemos uma solicitação para redefinir a senha de acesso da sua conta (professor ou aluno) no <strong>FitCoach Pro</strong>.

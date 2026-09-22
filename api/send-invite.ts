@@ -24,10 +24,38 @@ function isRateLimited(key: string, limit: number, windowMs: number): boolean {
   return false;
 }
 
+/**
+ * Sanitiza o HTML para e-mails no servidor:
+ * Remove elementos executáveis (<script>, <iframe>, <object>, <embed>, <applet>)
+ * e atributos de manipuladores de eventos inline (onload, onerror, onclick, etc.).
+ */
+function sanitizeEmailHtml(rawHtml: string): string {
+  if (!rawHtml || typeof rawHtml !== 'string') return '';
+
+  return rawHtml
+    // Remove tags de script e seus conteúdos
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Remove iframes e conteúdos
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    // Remove objects e embeds
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    // Remove formulários injetados
+    .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, '')
+    // Neutraliza atributos de manipuladores de eventos (onclick, onload, onerror, etc.)
+    .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+    // Neutraliza esquemas javascript: ou data:text/html em links
+    .replace(/href\s*=\s*["']?\s*(?:javascript|data:text\/html):[^"'>\s]*/gi, 'href="#"');
+}
+
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
 export default async function handler(req: any, res: any) {
-  // Headers de Segurança
+  // Headers de Segurança Estritos (OWASP)
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none';");
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   if (req.method !== 'POST') {
@@ -48,14 +76,31 @@ export default async function handler(req: any, res: any) {
   }
 
   const { to, subject, type } = req.body || {};
-  let html = req.body?.html;
+  let rawHtml = req.body?.html;
 
-  if (!to || !html) {
-    return res.status(400).json({ error: 'Campos to e html são obrigatórios' });
+  if (!to || !rawHtml || typeof rawHtml !== 'string') {
+    return res.status(400).json({ error: 'Campos to e html são obrigatórios e devem ser válidos.' });
   }
 
-  // 3. Rate Limiting por Destinatário: máx 3 e-mails para o mesmo destinatário a cada 5 minutos
+  // Limite razoável de tamanho do HTML para prevenir DoS (250 KB)
+  if (rawHtml.length > 250 * 1024) {
+    return res.status(400).json({ error: 'Corpo do e-mail excede o limite máximo permitido.' });
+  }
+
   const cleanTo = String(to).toLowerCase().trim();
+
+  // Prevenção de Email Header Injection (CRLF) e validação de formato
+  if (/[\r\n]/.test(cleanTo) || !EMAIL_REGEX.test(cleanTo)) {
+    return res.status(400).json({ error: 'Endereço de e-mail inválido ou malformado.' });
+  }
+
+  // Prevenção de Header Injection no assunto
+  const cleanSubject = String(subject || 'FitCoach Pro • Notificação de Acesso')
+    .replace(/[\r\n]+/g, ' ')
+    .trim()
+    .slice(0, 200);
+
+  // 3. Rate Limiting por Destinatário: máx 3 e-mails para o mesmo destinatário a cada 5 minutos
   if (isRateLimited(`to_${cleanTo}`, 3, 5 * 60 * 1000)) {
     res.setHeader('Retry-After', '300');
     return res.status(429).json({
@@ -63,6 +108,9 @@ export default async function handler(req: any, res: any) {
       code: 'EMAIL_RATE_LIMIT_EXCEEDED'
     });
   }
+
+  // Higienização de segurança do HTML antes de despachar
+  let html = sanitizeEmailHtml(rawHtml);
 
   // Se for redefinição de senha, gera o link seguro com token criptográfico do Supabase
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -84,11 +132,13 @@ export default async function handler(req: any, res: any) {
 
       if (!linkError && linkData?.properties?.action_link) {
         const actionLink = linkData.properties.action_link;
-        console.log('[API Send Invite] Link de recuperação oficial gerado:', actionLink);
-        html = html.replaceAll('__FITCOACH_RESET_URL__', actionLink);
-        html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, actionLink);
-        html = html.replace(/href=""/g, `href="${actionLink}"`);
-        html = html.replace(/href=''/g, `href='${actionLink}'`);
+        if (/^https?:\/\//i.test(actionLink)) {
+          const safeActionLink = actionLink.replace(/"/g, '&quot;');
+          html = html.replaceAll('__FITCOACH_RESET_URL__', safeActionLink);
+          html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, safeActionLink);
+          html = html.replace(/href=""/g, `href="${safeActionLink}"`);
+          html = html.replace(/href=''/g, `href='${safeActionLink}'`);
+        }
       }
     } catch (adminErr) {
       console.warn('[API Send Invite] Erro Supabase Admin generateLink:', adminErr);
@@ -114,20 +164,20 @@ export default async function handler(req: any, res: any) {
       const info = await transporter.sendMail({
         from: `"FitCoach Pro" <${gmailUser}>`,
         to: cleanTo,
-        subject: subject || 'Convite de Acesso • FitCoach Pro',
+        subject: cleanSubject,
         html,
       });
 
       return res.status(200).json({ success: true, messageId: info.messageId });
     } catch (err: any) {
       console.error('[API Send Invite] Erro Gmail SMTP:', err);
-      return res.status(500).json({ error: err.message || 'Falha ao enviar e-mail via Gmail SMTP.' });
+      return res.status(500).json({ error: 'Falha ao processar envio pelo serviço de e-mail.' });
     }
   }
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Nenhum provedor de e-mail configurado (GMAIL_USER ou RESEND_API_KEY).' });
+    return res.status(500).json({ error: 'Nenhum provedor de e-mail configurado no servidor.' });
   }
 
   try {
@@ -140,7 +190,7 @@ export default async function handler(req: any, res: any) {
       body: JSON.stringify({
         from: 'FitCoach Pro <onboarding@resend.dev>',
         to: [cleanTo],
-        subject: subject || 'Convite de Acesso • FitCoach Pro',
+        subject: cleanSubject,
         html,
       }),
     });
@@ -153,6 +203,6 @@ export default async function handler(req: any, res: any) {
 
     return res.status(response.status).json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno no servidor ao despachar e-mail.' });
   }
 }

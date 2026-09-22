@@ -6,6 +6,8 @@ import {
 } from '../lib/emailTemplates';
 import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
 
+import { isValidEmail, sanitizeHeader } from '../lib/security';
+
 export interface SendInviteResult {
   success: boolean;
   messageId?: string;
@@ -17,8 +19,16 @@ export interface SendInviteResult {
  * Dispara o e-mail de convite para a API segura (Resend) com proteção de Rate Limit
  */
 export async function sendInviteEmail(data: InviteEmailData): Promise<SendInviteResult> {
+  const cleanEmail = (data.toEmail || '').trim().toLowerCase();
+  if (!isValidEmail(cleanEmail)) {
+    return {
+      success: false,
+      error: 'Endereço de e-mail inválido ou malformado.',
+    };
+  }
+
   // Verificação de Rate Limit para prevenir spam de disparos
-  const rateCheck = checkRateLimit('EMAIL_SEND', data.toEmail);
+  const rateCheck = checkRateLimit('EMAIL_SEND', cleanEmail);
   if (!rateCheck.allowed) {
     return {
       success: false,
@@ -95,7 +105,15 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
  * Dispara o e-mail oficial de redefinição de senha
  */
 export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<SendInviteResult> {
-  const rateCheck = checkRateLimit('EMAIL_SEND', data.toEmail);
+  const cleanEmail = (data.toEmail || '').trim().toLowerCase();
+  if (!isValidEmail(cleanEmail)) {
+    return {
+      success: false,
+      error: 'Endereço de e-mail inválido ou malformado.',
+    };
+  }
+
+  const rateCheck = checkRateLimit('EMAIL_SEND', cleanEmail);
   if (!rateCheck.allowed) {
     return {
       success: false,

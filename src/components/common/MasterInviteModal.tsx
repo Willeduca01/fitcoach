@@ -65,7 +65,7 @@ export const MasterInviteModal: React.FC<MasterInviteModalProps> = ({ isOpen, on
     if (!generatedInvite) return;
     const text = `Olá ${trainerName}! Aqui é o desenvolvedor do FitCoach Pro. Preparei seu acesso exclusivo como Personal Trainer. Clique no link para criar sua conta: ${generatedInvite.url}`;
     const encoded = encodeURIComponent(text);
-    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank', 'noopener,noreferrer');
   };
 
   return (

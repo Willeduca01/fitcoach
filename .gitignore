@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+*.zip
+scripts/create_zip.ps1
 
 # Environment variables & secrets (CRITICAL: never commit to Git)
 .env

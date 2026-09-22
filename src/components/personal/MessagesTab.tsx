@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Paperclip
 } from 'lucide-react';
+import { sanitizeUrl } from '../../lib/security';
 
 interface MessagesTabProps {
   initialStudentId?: string;
@@ -125,7 +126,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                 >
                   <div className="relative shrink-0">
                     <img
-                      src={student.avatarUrl}
+                      src={sanitizeUrl(student.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
                       alt={student.name}
                       className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10"
                     />
@@ -181,7 +182,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
           <div className="p-3.5 border-b border-white/[0.06] flex items-center justify-between bg-zinc-900/80 rounded-t-2xl shrink-0">
             <div className="flex items-center gap-3">
               <img
-                src={selectedStudent?.avatarUrl}
+                src={sanitizeUrl(selectedStudent?.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
                 alt={selectedStudent?.name}
                 className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10"
               />

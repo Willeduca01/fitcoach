@@ -4,9 +4,11 @@ import { ChatMedia } from '../../types';
 import {
   compressImage,
   processVideo,
+  validateMediaFile,
   ProcessedImageResult,
   ProcessedVideoResult
 } from '../../lib/mediaCompressor';
+import { sanitizeFileName, sanitizeUrl } from '../../lib/security';
 import {
   Send,
   Loader2,
@@ -45,9 +47,16 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       setIsProcessing(true);
       setErrorMsg(null);
 
+      // Validação estrita de segurança do tipo de arquivo (OWASP)
+      const validation = validateMediaFile(file);
+      if (!validation.valid) {
+        setErrorMsg(validation.reason || 'Arquivo rejeitado pela política de segurança.');
+        setIsProcessing(false);
+        return;
+      }
+
       try {
         if (file.type.startsWith('image/')) {
-          // Comprime a imagem em segundo plano para economizar banco de dados
           const result = await compressImage(file);
           setProcessedImage(result);
         } else if (file.type.startsWith('video/')) {
@@ -63,7 +72,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
         }
       } catch (err: any) {
         console.error('Erro ao processar mídia:', err);
-        setErrorMsg('Não foi possível processar o arquivo selecionado.');
+        setErrorMsg(err.message || 'Não foi possível processar o arquivo selecionado.');
       } finally {
         setIsProcessing(false);
       }
@@ -78,32 +87,44 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
 
-    let mediaUrl = '';
+    let rawMediaUrl = '';
     let compressedSize = file.size;
     let thumbnailUrl: string | undefined = undefined;
 
     if (isImage && processedImage) {
-      mediaUrl = processedImage.dataUrl;
+      rawMediaUrl = processedImage.dataUrl;
       compressedSize = processedImage.compressedSize;
     } else if (isVideo && processedVideo) {
-      mediaUrl = processedVideo.dataUrl;
+      rawMediaUrl = processedVideo.dataUrl;
       compressedSize = processedVideo.compressedSize;
-      thumbnailUrl = processedVideo.thumbnailDataUrl;
+      thumbnailUrl = processedVideo.thumbnailDataUrl ? sanitizeUrl(processedVideo.thumbnailDataUrl, '') : undefined;
     }
 
-    if (!mediaUrl) return;
+    const safeMediaUrl = sanitizeUrl(rawMediaUrl, '');
+    if (!safeMediaUrl || safeMediaUrl === '#') {
+      setErrorMsg('Falha de segurança ao validar os dados da mídia.');
+      return;
+    }
+
+    const safeFileName = sanitizeFileName(
+      file.name,
+      isImage ? 'imagem-fitcoach.webp' : 'video-fitcoach.mp4'
+    );
 
     const media: ChatMedia = {
-      url: mediaUrl,
+      url: safeMediaUrl,
       type: isImage ? 'image' : 'video',
-      fileName: file.name,
+      fileName: safeFileName,
       fileSize: file.size,
       compressedSize,
       allowDownload: true,
       thumbnailUrl,
     };
 
-    onSendMedia(media, caption.trim());
+    // Remove quebras de linha e caracteres excessivos da legenda
+    const safeCaption = caption.replace(/[\x00-\x1F\x7F]/g, '').trim();
+
+    onSendMedia(media, safeCaption);
     onClose();
   };
 
@@ -115,7 +136,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={isImage ? 'Enviar Imagem' : isVideo ? 'Enviar Vídeo' : 'Enviar Mídia'}
-      subtitle={file ? file.name : undefined}
+      subtitle={file ? sanitizeFileName(file.name) : undefined}
     >
       <div className="space-y-4 text-sm font-sans">
         {/* Loading State */}
@@ -123,7 +144,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           <div className="flex flex-col items-center justify-center p-8 space-y-3 bg-zinc-900/60 rounded-2xl border border-white/[0.06]">
             <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
             <p className="text-xs text-zinc-300 font-medium">
-              Preparando visualização...
+              Processando e validando segurança da mídia...
             </p>
           </div>
         )}

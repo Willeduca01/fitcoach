@@ -10,6 +10,8 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { PersonalDashboardPage } from './pages/PersonalDashboardPage';
 import { StudentPortalPage } from './pages/StudentPortalPage';
 import { MasterDashboardPage } from './pages/MasterDashboardPage';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { QuickSwitcher } from './components/common/QuickSwitcher';
 
 const RootRedirect: React.FC = () => {
@@ -84,7 +86,9 @@ export const AppContent: React.FC = () => {
         <Route path="/dashboard" element={<PersonalDashboardPage />} />
         <Route path="/portal-aluno" element={<StudentPortalPage />} />
         <Route path="/" element={<RootRedirect />} />
-        <Route path="*" element={<RootRedirect />} />
+        <Route path="/404" element={<NotFoundPage />} />
+        <Route path="/erro" element={<NotFoundPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
 
       {/* Floating RBAC Quick Switcher for seamless testing and demonstration */}
@@ -99,7 +103,9 @@ export const App: React.FC = () => {
       <ThemeProvider>
         <AuthProvider>
           <AppDataProvider>
-            <AppContent />
+            <ErrorBoundary>
+              <AppContent />
+            </ErrorBoundary>
           </AppDataProvider>
         </AuthProvider>
       </ThemeProvider>

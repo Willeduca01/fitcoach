@@ -287,7 +287,7 @@ export const MasterDashboardPage: React.FC = () => {
     if (!generatedInvite) return;
     const text = `Olá! Sou o administrador do FitCoach Pro. Preparei seu acesso exclusivo como Personal Trainer. Clique no link para criar sua conta: ${generatedInvite.url}`;
     const encoded = encodeURIComponent(text);
-    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank', 'noopener,noreferrer');
   };
 
   const filteredTrainers = trainers.filter((t) =>

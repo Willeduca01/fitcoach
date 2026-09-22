@@ -21,7 +21,14 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
+import {
+  checkRateLimit,
+  recordAttempt,
+  syncServerRateLimit,
+  formatSecondsToTime
+} from '../lib/rateLimiter';
+import { TurnstileCaptcha } from '../components/common/TurnstileCaptcha';
+import { verifyTurnstileToken } from '../lib/captcha';
 
 export const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -50,6 +57,7 @@ export const RegisterPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [captchaToken, setCaptchaToken] = useState<string>('');
 
   // Validação automática se houver código na URL
   useEffect(() => {
@@ -127,31 +135,54 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    // Rate limit para cadastro
-    const signupCheck = checkRateLimit('SIGNUP', email || 'global');
+    // Rate limit para cadastro (local e servidor)
+    const cleanEmail = email.trim().toLowerCase();
+    const signupCheck = checkRateLimit('SIGNUP', cleanEmail || 'global');
     if (!signupCheck.allowed) {
       setErrorMsg(`Muitas tentativas de cadastro recentes. Aguarde ${formatSecondsToTime(signupCheck.lockoutSeconds)}.`);
       return;
     }
 
+    const serverSignupCheck = await syncServerRateLimit('SIGNUP', cleanEmail || 'global');
+    if (!serverSignupCheck.allowed) {
+      setErrorMsg(`Limite de tentativas de cadastro atingido para este IP/conta. Aguarde ${formatSecondsToTime(serverSignupCheck.lockoutSeconds)}.`);
+      return;
+    }
+
+    if (!captchaToken) {
+      setErrorMsg('Por favor, complete a verificação anti-bot abaixo para prosseguir com o cadastro.');
+      return;
+    }
+
     setIsSubmitting(true);
+
+    const captchaCheck = await verifyTurnstileToken(captchaToken);
+    if (!captchaCheck.success) {
+      setErrorMsg(captchaCheck.error || 'Falha na validação de segurança anti-bot.');
+      setCaptchaToken('');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const res = await signUpWithInviteCode({
         name,
-        email,
+        email: cleanEmail,
         phone,
         password,
         inviteCode,
       });
 
       if (!res.success) {
-        recordAttempt('SIGNUP', email || 'global', false);
+        recordAttempt('SIGNUP', cleanEmail || 'global', false);
+        setCaptchaToken('');
         setErrorMsg(res.error || 'Não foi possível concluir o cadastro.');
         setIsSubmitting(false);
         return;
       }
 
-      recordAttempt('SIGNUP', email || 'global', true);
+      recordAttempt('SIGNUP', cleanEmail || 'global', true);
+      setCaptchaToken('');
       setIsSuccess(true);
       confetti({
         particleCount: 80,
@@ -381,6 +412,21 @@ export const RegisterPage: React.FC = () => {
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{errorMsg}</span>
+                </div>
+              )}
+
+              {/* Desafio anti-bot Turnstile */}
+              {!isSuccess && (
+                <div className="p-3 rounded-2xl bg-zinc-950/70 border border-white/[0.08] my-2">
+                  <TurnstileCaptcha
+                    action="signup"
+                    onVerify={(token) => {
+                      setCaptchaToken(token);
+                      setErrorMsg('');
+                    }}
+                    onExpire={() => setCaptchaToken('')}
+                    onError={(err) => setErrorMsg(err || 'Erro no desafio anti-bot.')}
+                  />
                 </div>
               )}
 

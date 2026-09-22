@@ -9,6 +9,8 @@ import {
   subscribeToRateLimit,
   formatSecondsToTime
 } from '../lib/rateLimiter';
+import { TurnstileCaptcha } from '../components/common/TurnstileCaptcha';
+import { verifyTurnstileToken } from '../lib/captcha';
 import {
   Dumbbell,
   Mail,
@@ -32,6 +34,7 @@ export const ForgotPasswordPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [captchaToken, setCaptchaToken] = useState<string>('');
 
   // Monitora bloqueio de rate limit (IP, Dispositivo e E-mail)
   useEffect(() => {
@@ -89,12 +92,25 @@ export const ForgotPasswordPage: React.FC = () => {
     const serverCheck = await syncServerRateLimit('EMAIL_SEND', cleanEmail);
     if (!serverCheck.allowed) {
       setLockoutSeconds(serverCheck.lockoutSeconds);
-      setErrorMessage(`Limite de solicitações atingido para este IP. Aguarde ${formatSecondsToTime(serverCheck.lockoutSeconds)}.`);
+      setErrorMessage(`Limite de solicitações atingido para este IP/conta. Aguarde ${formatSecondsToTime(serverCheck.lockoutSeconds)}.`);
+      return;
+    }
+
+    if (!captchaToken) {
+      setErrorMessage('Por favor, complete a verificação anti-bot abaixo para enviar o link.');
       return;
     }
 
     setIsLoading(true);
     setErrorMessage('');
+
+    const captchaCheck = await verifyTurnstileToken(captchaToken);
+    if (!captchaCheck.success) {
+      setErrorMessage(captchaCheck.error || 'Falha na validação de segurança anti-bot.');
+      setCaptchaToken('');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       // 1. Envia o e-mail de recuperação formatado pelo nosso serviço de e-mail (Gmail SMTP com link assinado do Supabase)
@@ -112,6 +128,7 @@ export const ForgotPasswordPage: React.FC = () => {
         const supabaseRes = await sendPasswordResetEmail(cleanEmail);
         if (!supabaseRes.success) {
           recordAttempt('EMAIL_SEND', cleanEmail, false);
+          setCaptchaToken('');
           setErrorMessage(supabaseRes.error || res.error || 'Não foi possível processar a solicitação de redefinição.');
           setIsLoading(false);
           return;
@@ -119,9 +136,11 @@ export const ForgotPasswordPage: React.FC = () => {
       }
 
       recordAttempt('EMAIL_SEND', cleanEmail, true);
+      setCaptchaToken('');
       setIsSuccess(true);
     } catch (err: any) {
       recordAttempt('EMAIL_SEND', cleanEmail, false);
+      setCaptchaToken('');
       setErrorMessage(err.message || 'Erro inesperado ao solicitar recuperação de senha.');
     } finally {
       setIsLoading(false);
@@ -253,6 +272,21 @@ export const ForgotPasswordPage: React.FC = () => {
                   <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                {/* Desafio anti-bot Turnstile */}
+                {lockoutSeconds === 0 && (
+                  <div className="p-3 rounded-2xl bg-zinc-950/70 border border-white/[0.08] my-2">
+                    <TurnstileCaptcha
+                      action="forgot_password"
+                      onVerify={(token) => {
+                        setCaptchaToken(token);
+                        setErrorMessage('');
+                      }}
+                      onExpire={() => setCaptchaToken('')}
+                      onError={(err) => setErrorMessage(err || 'Erro no desafio anti-bot.')}
+                    />
                   </div>
                 )}
 

@@ -119,7 +119,7 @@ export const InviteStudentModal: React.FC<InviteStudentModalProps> = ({ isOpen, 
     const coachName = personal.name || 'seu Personal Trainer';
     const text = `Olá ${studentName || 'aluno(a)'}! Aqui é o ${coachName}. Preparei seu acesso exclusivo ao FitCoach Pro para acompanhar seus treinos e metas. Clique no link para criar sua conta: ${generatedInvite.url}`;
     const encoded = encodeURIComponent(text);
-    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleReset = () => {

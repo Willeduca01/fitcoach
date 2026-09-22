@@ -29,14 +29,34 @@ function emailServerPlugin(): Plugin {
             try {
               const body = JSON.parse(bodyStr || '{}');
               const { to, subject } = body;
-              let html = body.html;
+              let rawHtml = body.html;
 
-              if (!to || !html) {
+              if (!to || !rawHtml || typeof rawHtml !== 'string') {
                 res.statusCode = 400;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: 'Campos to e html são obrigatórios.' }));
+                res.end(JSON.stringify({ error: 'Campos to e html são obrigatórios e devem ser válidos.' }));
                 return;
               }
+
+              const cleanTo = String(to).toLowerCase().trim();
+              if (/[\r\n]/.test(cleanTo) || !cleanTo.includes('@')) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Endereço de e-mail inválido ou malformado.' }));
+                return;
+              }
+
+              const cleanSubject = String(subject || 'FitCoach Pro • Notificação')
+                .replace(/[\r\n]+/g, ' ')
+                .trim()
+                .slice(0, 200);
+
+              let html = rawHtml
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+                .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+                .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+                .replace(/href\s*=\s*["']?\s*(?:javascript|data:text\/html):[^"'>\s]*/gi, 'href="#"');
 
               // Se for redefinição de senha, gera o link seguro com token criptográfico do Supabase
               if (body.type === 'PASSWORD_RESET' && serviceRoleKey) {
@@ -83,8 +103,8 @@ function emailServerPlugin(): Plugin {
 
                 const info = await transporter.sendMail({
                   from: `"FitCoach Pro" <${gmailUser}>`,
-                  to,
-                  subject: subject || 'Convite de Acesso • FitCoach Pro',
+                  to: cleanTo,
+                  subject: cleanSubject,
                   html,
                 });
 
@@ -96,7 +116,7 @@ function emailServerPlugin(): Plugin {
               }
 
               // Prioridade 2: Fallback para Resend API
-              console.log(`[EmailServer] Enviando convite via Resend para: ${to}`);
+              console.log(`[EmailServer] Enviando convite via Resend para: ${cleanTo}`);
 
               const response = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
@@ -106,8 +126,8 @@ function emailServerPlugin(): Plugin {
                 },
                 body: JSON.stringify({
                   from: 'FitCoach Pro <onboarding@resend.dev>',
-                  to: [to],
-                  subject: subject || 'Convite de Acesso • FitCoach Pro',
+                  to: [cleanTo],
+                  subject: cleanSubject,
                   html,
                 }),
               });
@@ -221,7 +241,55 @@ function emailServerPlugin(): Plugin {
           return;
         }
 
-        // Middleware de Rate Limiting por IP local
+        // In-memory store para simular rate limiting com chaves compostas em ambiente local
+        const devRateLimitStore = new Map<string, { attempts: number[]; lockedUntil: number | null }>();
+
+        // Middleware de Verificação de CAPTCHA Cloudflare Turnstile local
+        if (req.method === 'POST' && (url === '/api/verify-captcha' || url === '/fitcoach/api/verify-captcha')) {
+          let bodyStr = '';
+          req.on('data', (chunk) => {
+            bodyStr += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              const { token } = body;
+              if (!token || typeof token !== 'string') {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Token obrigatório.' }));
+                return;
+              }
+
+              const secretKey =
+                env.CLOUDFLARE_TURNSTILE_SECRET_KEY ||
+                process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY ||
+                '1x0000000000000000000000000000000AA';
+
+              const formData = new URLSearchParams();
+              formData.append('secret', secretKey);
+              formData.append('response', token.trim());
+
+              const cfResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+                method: 'POST',
+                body: formData,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              });
+
+              const data = (await cfResponse.json()) as any;
+              res.statusCode = data.success ? 200 : 403;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(data));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message || 'Erro no servidor de verificação CAPTCHA.' }));
+            }
+          });
+          return;
+        }
+
+        // Middleware de Rate Limiting por IP + Conta local (Composto)
         if (url === '/api/rate-limit' || url === '/fitcoach/api/rate-limit') {
           const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1')
             .toString()
@@ -244,16 +312,99 @@ function emailServerPlugin(): Plugin {
             req.on('end', () => {
               try {
                 const body = JSON.parse(bodyStr || '{}');
-                const { action = 'LOGIN', op = 'check' } = body;
+                const { action = 'LOGIN', op = 'check', identifier } = body;
+                const cleanId = typeof identifier === 'string'
+                  ? identifier.replace(/[\r\n\x00-\x1F\x7F]/g, '').trim().toLowerCase()
+                  : '';
+                const keys = [`${action}_ip_${clientIp}`];
+                if (cleanId && cleanId !== 'global' && cleanId.length > 2) {
+                  keys.push(`${action}_account_${cleanId}`);
+                }
+
+                const now = Date.now();
+                const maxAttempts = action === 'SIGNUP' ? 4 : 5;
+                const lockoutMs = 5 * 60 * 1000;
+                const windowMs = 5 * 60 * 1000;
+
+                if (op === 'success') {
+                  for (const k of keys) {
+                    devRateLimitStore.delete(k);
+                  }
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({
+                    ip: clientIp,
+                    allowed: true,
+                    remainingAttempts: maxAttempts,
+                    lockoutSeconds: 0,
+                  }));
+                  return;
+                }
+
+                let isAnyLocked = false;
+                let maxLockoutSec = 0;
+                let minRemaining = maxAttempts;
+                let lockMsg = '';
+
+                for (const k of keys) {
+                  let record = devRateLimitStore.get(k);
+                  if (!record) {
+                    record = { attempts: [], lockedUntil: null };
+                    devRateLimitStore.set(k, record);
+                  }
+
+                  if (record.lockedUntil && record.lockedUntil <= now) {
+                    record.lockedUntil = null;
+                    record.attempts = [];
+                  }
+
+                  if (op === 'fail') {
+                    record.attempts = record.attempts.filter((t) => now - t < windowMs);
+                    record.attempts.push(now);
+                    if (record.attempts.length >= maxAttempts) {
+                      record.lockedUntil = now + lockoutMs;
+                    }
+                  }
+
+                  const isLocked = Boolean(record.lockedUntil && record.lockedUntil > now);
+                  const validAttempts = record.attempts.filter((t) => now - t < windowMs);
+                  const remaining = isLocked ? 0 : Math.max(0, maxAttempts - validAttempts.length);
+                  if (remaining < minRemaining) minRemaining = remaining;
+
+                  if (isLocked && record.lockedUntil) {
+                    isAnyLocked = true;
+                    const sec = Math.ceil((record.lockedUntil - now) / 1000);
+                    if (sec > maxLockoutSec) {
+                      maxLockoutSec = sec;
+                      lockMsg = k.includes('_account_')
+                        ? `Conta bloqueada temporariamente. Aguarde ${sec}s.`
+                        : `IP bloqueado temporariamente. Aguarde ${sec}s.`;
+                    }
+                  }
+                }
+
+                if (isAnyLocked) {
+                  res.statusCode = 429;
+                  res.setHeader('Retry-After', String(maxLockoutSec));
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({
+                    ip: clientIp,
+                    allowed: false,
+                    remainingAttempts: 0,
+                    lockoutSeconds: maxLockoutSec,
+                    error: lockMsg || `Acesso bloqueado temporariamente. Aguarde ${maxLockoutSec}s.`,
+                    code: 'RATE_LIMIT_EXCEEDED',
+                  }));
+                  return;
+                }
+
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({
                   ip: clientIp,
                   allowed: true,
-                  remainingAttempts: 5,
+                  remainingAttempts: minRemaining,
                   lockoutSeconds: 0,
-                  action,
-                  op,
                 }));
               } catch {
                 res.statusCode = 400;
@@ -271,8 +422,23 @@ function emailServerPlugin(): Plugin {
   };
 }
 
+const securityHeaders = {
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://*.amazonaws.com https:; media-src 'self' data: blob: https://*.supabase.co https://*.amazonaws.com https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://api64.ipify.org https://api.ipify.org https://*.amazonaws.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self';",
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '0',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+};
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), emailServerPlugin()],
   base: process.env.VERCEL ? '/' : '/fitcoach/',
+  server: {
+    headers: securityHeaders,
+  },
+  preview: {
+    headers: securityHeaders,
+  },
 });
