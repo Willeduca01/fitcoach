@@ -141,16 +141,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const userEmail = authUser?.user?.email;
             if (userEmail) {
               try {
+                const { data: sessionData } = await supabase.auth.getSession();
+                const token = sessionData?.session?.access_token;
+                const linkHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+                if (token) linkHeaders['Authorization'] = `Bearer ${token}`;
+
                 let linkRes = await fetch('/api/link-student', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: linkHeaders,
                   body: JSON.stringify({ userId, email: userEmail }),
                 }).catch(() => null);
 
                 if (!linkRes || linkRes.status === 404) {
                   linkRes = await fetch('/fitcoach/api/link-student', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: linkHeaders,
                     body: JSON.stringify({ userId, email: userEmail }),
                   }).catch(() => null);
                 }

@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getRateLimitKeys } from '../src/lib/security';
 
 // Serverless API Handler para Vercel: Rate Limiting Multicamadas Robusto (IP + Conta/E-mail)
 
@@ -102,10 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Chaves compostas para defesa em profundidade (OWASP):
   // 1. Chave por IP: Defesa contra DoS / flood massivo de uma mesma máquina/rede
   // 2. Chave por Conta: Defesa contra botnets e proxies rotativos que atacam um mesmo e-mail
-  const keys: string[] = [`${safeAction}_ip_${clientIp}`];
-  if (cleanId && cleanId !== 'global' && cleanId.length > 2) {
-    keys.push(`${safeAction}_account_${cleanId}`);
-  }
+  const keys: string[] = getRateLimitKeys(safeAction, clientIp, cleanId);
 
   const now = Date.now();
 

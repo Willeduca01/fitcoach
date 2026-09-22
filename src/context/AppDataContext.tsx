@@ -145,16 +145,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Se ainda não estiver vinculado na coluna user_id, vincula via API
         if (!myStudent && user?.email) {
           try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            const linkHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) linkHeaders['Authorization'] = `Bearer ${token}`;
+
             let linkRes = await fetch('/api/link-student', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: linkHeaders,
               body: JSON.stringify({ userId, email: user.email }),
             }).catch(() => null);
 
             if (!linkRes || linkRes.status === 404) {
               linkRes = await fetch('/fitcoach/api/link-student', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: linkHeaders,
                 body: JSON.stringify({ userId, email: user.email }),
               }).catch(() => null);
             }

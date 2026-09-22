@@ -9,6 +9,7 @@ import { WorkoutTrackerTab } from '../components/student/WorkoutTrackerTab';
 import { EvolutionTab } from '../components/student/EvolutionTab';
 import { PaymentTab } from '../components/student/PaymentTab';
 import { ContactTab } from '../components/student/ContactTab';
+import { supabase } from '../lib/supabase';
 
 export const StudentPortalPage: React.FC = () => {
   const { role, currentStudentId, user, logout, isPasswordRecovery } = useAuth();
@@ -28,43 +29,49 @@ export const StudentPortalPage: React.FC = () => {
 
   // Professores reais não acessam a visão de aluno
   if (role === 'PERSONAL' && !isDemoMode) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/" replace />;
   }
 
-  const activeStudent = students.find((s) => s.id === currentStudentId) || students[0];
+  const activeStudent = students.find((s) => s.id === currentStudentId) || (isDemoMode ? students[0] : undefined);
 
   // Tentativa automática de vincular a conta do aluno ao carregar se não houver aluno ativo
   useEffect(() => {
     let isCancelled = false;
     if (!activeStudent && user?.id && user?.email && !isLoadingData) {
       setIsLinking(true);
-      fetch('/api/link-student', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, email: user.email }),
-      })
-        .then((res) => {
+      (async () => {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          let res = await fetch('/api/link-student', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ userId: user.id, email: user.email }),
+          }).catch(() => null);
+
           if (!res || res.status === 404) {
-            return fetch('/fitcoach/api/link-student', {
+            res = await fetch('/fitcoach/api/link-student', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers,
               body: JSON.stringify({ userId: user.id, email: user.email }),
-            });
+            }).catch(() => null);
           }
-          return res;
-        })
-        .then((res) => res?.json())
-        .then((data) => {
-          if (!isCancelled && data?.success) {
-            window.location.reload();
+
+          if (res && res.ok) {
+            const data = await res.json();
+            if (!isCancelled && data?.success) {
+              window.location.reload();
+            }
           }
-        })
-        .catch((err) => {
+        } catch (err) {
           console.warn('[StudentPortalPage] Auto-link falhou:', err);
-        })
-        .finally(() => {
+        } finally {
           if (!isCancelled) setIsLinking(false);
-        });
+        }
+      })();
     }
     return () => {
       isCancelled = true;
@@ -73,7 +80,7 @@ export const StudentPortalPage: React.FC = () => {
 
   if (isLoadingData || isLinking) {
     return (
-      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 text-center font-sans">
+      <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col items-center justify-center p-6 text-center font-sans">
         <div className="space-y-4">
           <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
           <p className="text-xs text-zinc-400">Carregando seus treinos e ficha de aluno...</p>
@@ -84,8 +91,8 @@ export const StudentPortalPage: React.FC = () => {
 
   if (!activeStudent) {
     return (
-      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="max-w-md w-full p-8 rounded-3xl bg-zinc-900/80 border border-white/10 shadow-2xl space-y-6">
+      <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="max-w-md w-full p-8 rounded-[28px] bg-[#121c1a]/75 backdrop-blur-2xl border border-white/[0.09] ring-1 ring-white/[0.05] shadow-[0_25px_60px_rgba(0,0,0,0.7)] space-y-6">
           <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
             <ShieldAlert className="w-7 h-7" />
           </div>

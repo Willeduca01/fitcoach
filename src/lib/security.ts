@@ -47,6 +47,36 @@ export function sanitizeHtml(
 }
 
 /**
+ * Gera as chaves de rate limiting para defesa em profundidade (OWASP):
+ * 1. Chave por IP: Defesa contra DoS / flood massivo vindo da mesma máquina/rede.
+ * 2. Chave por Conta/Identificador: Defesa contra botnets e proxies rotativos que atacam a mesma conta.
+ * Retorna o array de chaves a serem validadas simultaneamente no backend.
+ */
+export function getRateLimitKeys(action: string, ip: string, identifier?: string): string[] {
+  const cleanIp = ip.trim() || '127.0.0.1';
+  const keys: string[] = [`${action}_ip_${cleanIp}`];
+
+  const cleanId = identifier?.replace(/[\r\n\x00-\x1F\x7F]/g, '').trim().toLowerCase() || '';
+  if (cleanId && cleanId.length > 2 && cleanId !== 'global') {
+    keys.push(`${action}_account_${cleanId}`);
+  }
+
+  return keys;
+}
+
+/**
+ * Retorna chave composta (ou por IP) para rate limiting.
+ */
+export function getRateLimitKey(action: string, ip: string, identifier?: string): string {
+  const cleanIp = ip.trim() || '127.0.0.1';
+  const cleanId = identifier?.replace(/[\r\n\x00-\x1F\x7F]/g, '').trim().toLowerCase() || '';
+  if (cleanId && cleanId.length > 2 && cleanId !== 'global') {
+    return `${action}_ip_${cleanIp}_account_${cleanId}`;
+  }
+  return `${action}_ip_${cleanIp}`;
+}
+
+/**
  * Sanitiza URLs garantindo que esquemas maliciosos (javascript:, data:text/html, vbscript:, file:)
  * sejam neutralizados. Aceita apenas http, https, mailto, tel, caminhos relativos (/), âncoras (#)
  * ou blob URLs e data URLs estritamente de imagens rasterizadas (jpeg, png, webp, gif).

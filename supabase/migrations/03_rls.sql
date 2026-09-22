@@ -62,7 +62,11 @@ DROP POLICY IF EXISTS "Qualquer usuario autenticado pode ver perfil do personal"
 CREATE POLICY "Qualquer usuario autenticado pode ver perfil do personal"
     ON public.personal_profiles FOR SELECT
     TO authenticated
-    USING (true);
+    USING (
+        id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.students WHERE personal_id = auth.uid() AND user_id = personal_profiles.id)
+        OR EXISTS (SELECT 1 FROM public.students WHERE user_id = auth.uid() AND personal_id = personal_profiles.id)
+    );
 
 DROP POLICY IF EXISTS "Personal gerencia seu proprio perfil profissional" ON public.personal_profiles;
 CREATE POLICY "Personal gerencia seu proprio perfil profissional"

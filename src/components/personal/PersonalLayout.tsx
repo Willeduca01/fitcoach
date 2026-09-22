@@ -48,9 +48,9 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
 
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col md:flex-row pb-20 md:pb-0 font-sans">
+    <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col md:flex-row pb-20 md:pb-0 font-sans">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-zinc-950/80 border-r border-white/[0.06] backdrop-blur-xl shrink-0 sticky top-0 h-screen">
+      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-[#0c1615]/85 border-r border-white/[0.06] backdrop-blur-2xl shrink-0 sticky top-0 h-screen">
         {/* Brand Header */}
         <div className="p-6 border-b border-white/[0.06] flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/10">
@@ -140,7 +140,7 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
       </aside>
 
       {/* Mobile Top Header */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 bg-zinc-950/90 backdrop-blur-md border-b border-white/[0.06] sticky top-0 z-30">
+      <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0c1615]/90 backdrop-blur-md border-b border-white/[0.06] sticky top-0 z-30">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center">
             <Dumbbell className="w-4 h-4 text-zinc-950 stroke-[2.5]" />
@@ -158,22 +158,20 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
           <img
             src={sanitizeUrl(personal.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
             alt={personal.name}
-            className="w-8 h-8 rounded-full object-cover ring-1 ring-emerald-500/30"
+            className="w-8 h-8 rounded-full object-cover border border-emerald-500/40"
           />
-          <div className="flex items-center gap-1">
-            <ThemeToggle size="sm" />
-            <button
-              onClick={logout}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={logout}
+            title="Sair"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
       {/* Mobile Bottom Dock Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-xl border-t border-white/[0.06] px-2 py-1.5 flex justify-around items-center">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0c1615]/90 backdrop-blur-xl border-t border-white/[0.06] px-2 py-1.5 flex justify-around items-center">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;

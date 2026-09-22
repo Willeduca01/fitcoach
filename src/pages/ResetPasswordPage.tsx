@@ -230,31 +230,30 @@ export const ResetPasswordPage: React.FC = () => {
   const hasMatch = password.length > 0 && password === confirmPassword;
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans">
-      {/* Background Glows */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px] pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px] pointer-events-none" />
-
+    <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans select-none">
       {/* Main Container */}
       <div className="w-full max-w-md space-y-6 relative z-10 animate-in fade-in duration-300">
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-xl shadow-emerald-500/20 mb-2">
-            <Dumbbell className="w-7 h-7 text-zinc-950 stroke-[2.5]" />
+        <div className="text-center space-y-2.5">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-[22px] bg-gradient-to-tr from-[#2dd4bf] to-[#059669] shadow-[0_0_35px_rgba(45,212,191,0.28)] mb-2 p-0.5">
+            <div className="w-full h-full rounded-[20px] bg-gradient-to-tr from-[#2dd4bf] via-[#10b981] to-[#059669] flex items-center justify-center">
+              <Dumbbell className="w-8 h-8 text-[#071915] stroke-[2.4]" />
+            </div>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-white">FitCoach</h1>
-            <span className="text-xs uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <h1 className="text-[26px] font-bold tracking-tight text-white">FitCoach</h1>
+            <span className="text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
               PRO
             </span>
           </div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-xs text-zinc-400 max-w-xs mx-auto">
             Defina sua nova senha de acesso
           </p>
         </div>
 
         {/* Card */}
-        <div className="rounded-3xl bg-zinc-900/70 backdrop-blur-xl border border-white/[0.08] p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-6">
+        <div className="rounded-[28px] bg-[#121c1a]/70 backdrop-blur-2xl border border-white/[0.09] ring-1 ring-white/[0.05] p-6 sm:p-8 shadow-[0_25px_60px_rgba(0,0,0,0.7)] space-y-6 relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
           {isSuccess ? (
             <div className="text-center space-y-5 py-3 animate-in fade-in duration-300">
               <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">

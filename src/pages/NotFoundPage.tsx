@@ -45,27 +45,26 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans select-none">
-      {/* Background Glows */}
-      <div className="absolute top-1/4 -left-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-40 w-96 h-96 bg-zinc-700/5 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans select-none">
       <div className="w-full max-w-md relative z-10 space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
         {/* Logo & Brand Header */}
-        <div className="space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/10 mx-auto">
-            <Dumbbell className="w-6 h-6 text-zinc-950 stroke-[2.5]" />
+        <div className="space-y-2.5">
+          <div className="w-16 h-16 rounded-[22px] bg-gradient-to-tr from-[#2dd4bf] to-[#059669] shadow-[0_0_35px_rgba(45,212,191,0.28)] mx-auto flex items-center justify-center p-0.5">
+            <div className="w-full h-full rounded-[20px] bg-gradient-to-tr from-[#2dd4bf] via-[#10b981] to-[#059669] flex items-center justify-center">
+              <Dumbbell className="w-8 h-8 text-[#071915] stroke-[2.4]" />
+            </div>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <span className="text-xl font-semibold tracking-tight text-zinc-100">FitCoach</span>
-            <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+            <span className="text-[26px] font-bold tracking-tight text-white">FitCoach</span>
+            <span className="text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
               PRO
             </span>
           </div>
         </div>
 
         {/* Card Principal */}
-        <div className="p-8 sm:p-10 rounded-3xl bg-zinc-900/80 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/80 space-y-6">
+        <div className="p-8 sm:p-10 rounded-[28px] bg-[#121c1a]/70 backdrop-blur-2xl border border-white/[0.09] ring-1 ring-white/[0.05] shadow-[0_25px_60px_rgba(0,0,0,0.7)] space-y-6 relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
           {/* Badge de Erro Simples */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold tracking-wide">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

@@ -307,9 +307,9 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
   const totalStudents = trainers.reduce((acc, t) => acc + t.students.length, 0);
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans pb-16">
+    <div className="min-h-screen bg-transparent text-zinc-100 font-sans pb-16">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-white/[0.08] px-4 sm:px-8 py-3.5">
+      <header className="sticky top-0 z-40 bg-[#0c1615]/85 backdrop-blur-xl border-b border-white/[0.08] px-4 sm:px-8 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center shadow-lg shadow-amber-500/10">

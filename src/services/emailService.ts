@@ -5,8 +5,8 @@ import {
   PasswordResetEmailData,
 } from '../lib/emailTemplates';
 import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
-
 import { isValidEmail, sanitizeHeader } from '../lib/security';
+import { supabase } from '../lib/supabase';
 
 export interface SendInviteResult {
   success: boolean;
@@ -39,6 +39,15 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
   const { subject, html } = generateInviteEmailHtml(data);
 
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    const authHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      authHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
     const payload = JSON.stringify({
       to: data.toEmail,
       subject,
@@ -50,14 +59,14 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
     // Tenta primeiro o endpoint local do Vite / Servidor
     let res = await fetch('/api/send-invite', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: payload,
     }).catch(() => null);
 
     if (!res || res.status === 404) {
       res = await fetch('/fitcoach/api/send-invite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: payload,
       }).catch(() => null);
     }

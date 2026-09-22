@@ -125,6 +125,9 @@ export async function createStudentInvite(params: {
   targetEmail?: string;
   plan?: string;
 }): Promise<Invite> {
+  const { data: authData } = await supabase.auth.getUser();
+  const effectivePersonalId = authData?.user?.id || params.personalId;
+
   const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
   const code = `ALUNO-${randomSuffix}`;
 
@@ -133,7 +136,8 @@ export async function createStudentInvite(params: {
     .insert({
       code,
       type: 'STUDENT',
-      personal_id: params.personalId,
+      personal_id: effectivePersonalId,
+      created_by: authData?.user?.id || null,
       target_name: params.targetName,
       target_email: params.targetEmail || null,
       plan: params.plan || 'MENSAL',

@@ -19,6 +19,7 @@
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.15",
+    "framer-motion": "^13.4.1",
     "lucide-react": "^1.46.0",
     "nodemailer": "^10.0.10",
     "react": "^19.2.8",
@@ -28,6 +29,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@21st-dev/cli": "^1.17.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.13.3",
     "@types/nodemailer": "^8.0.2",

@@ -69,28 +69,35 @@ if (typeof window !== 'undefined') {
   }
 }
 
+import { FitnessBackground } from './components/common/FitnessBackground';
+
 export const AppContent: React.FC = () => {
   return (
-    <div className="relative min-h-screen bg-[#09090b] text-zinc-100 font-sans transition-colors duration-200">
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
-        <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/cadastro" element={<RegisterPage />} />
-        <Route path="/ativar-convite" element={<RegisterPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/master" element={<MasterDashboardPage />} />
-        <Route path="/master/logs" element={<MasterDashboardPage defaultTab="LOGS" />} />
-        <Route path="/dashboard" element={<PersonalDashboardPage />} />
-        <Route path="/portal-aluno" element={<StudentPortalPage />} />
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="/404" element={<NotFoundPage />} />
-        <Route path="/erro" element={<NotFoundPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+    <div className="relative min-h-screen bg-[#f0f4f2] dark:bg-[#0a1312] text-slate-800 dark:text-zinc-100 font-sans transition-colors duration-200">
+      {/* Global Fitness Background Ambience & Watermarks */}
+      <FitnessBackground />
+
+      <div className="relative z-10">
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
+          <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/cadastro" element={<RegisterPage />} />
+          <Route path="/ativar-convite" element={<RegisterPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/master" element={<MasterDashboardPage />} />
+          <Route path="/master/logs" element={<MasterDashboardPage defaultTab="LOGS" />} />
+          <Route path="/dashboard" element={<PersonalDashboardPage />} />
+          <Route path="/portal-aluno" element={<StudentPortalPage />} />
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/404" element={<NotFoundPage />} />
+          <Route path="/erro" element={<NotFoundPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </div>
 
       {/* Floating RBAC Quick Switcher for seamless testing and demonstration */}
       <QuickSwitcher />

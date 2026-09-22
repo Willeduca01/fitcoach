@@ -45,9 +45,9 @@ export const StudentLayout: React.FC<StudentLayoutProps> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col md:flex-row pb-20 md:pb-0 font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
+    <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col md:flex-row pb-20 md:pb-0 font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
       {/* Desktop Left Sidebar (Design refinado estilo Linear / Raycast) */}
-      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-[#0d0d11]/80 backdrop-blur-xl border-r border-white/[0.06] shrink-0 sticky top-0 h-screen z-30">
+      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-[#0c1615]/85 backdrop-blur-2xl border-r border-white/[0.06] shrink-0 sticky top-0 h-screen z-30">
         {/* Brand Header */}
         <div className="p-6 border-b border-white/[0.06] flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-zinc-800 border border-white/[0.08] flex items-center justify-center text-zinc-100 shadow-subtle">
@@ -144,7 +144,7 @@ export const StudentLayout: React.FC<StudentLayoutProps> = ({
       </aside>
 
       {/* Mobile Top Header */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0d0d11]/90 backdrop-blur-xl border-b border-white/[0.06] sticky top-0 z-30">
+      <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0c1615]/90 backdrop-blur-xl border-b border-white/[0.06] sticky top-0 z-30">
         <div className="flex items-center gap-2.5">
           <img
             src={sanitizeUrl(activeStudent?.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
@@ -175,7 +175,7 @@ export const StudentLayout: React.FC<StudentLayoutProps> = ({
       </header>
 
       {/* Mobile Bottom Dock Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0d0d11]/95 backdrop-blur-xl border-t border-white/[0.06] px-2 py-1.5 flex justify-around items-center">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0c1615]/95 backdrop-blur-xl border-t border-white/[0.06] px-2 py-1.5 flex justify-around items-center">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;

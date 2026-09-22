@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
+import { authenticateRequest, getSupabaseAdmin } from './_utils/auth';
 
 // Cache em memória para rastreamento de requisições na borda/servidor
 const rateLimitMap = new Map<string, number[]>();
@@ -50,7 +51,6 @@ function sanitizeEmailHtml(rawHtml: string): string {
 }
 
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
-
 const ALLOWED_TYPES = ['PASSWORD_RESET', 'INVITE'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const { to, subject, type, role } = req.body || {};
+  const { to, subject, type = 'INVITE', role, inviteCode } = req.body || {};
   let rawHtml = req.body?.html;
 
   if (type && !ALLOWED_TYPES.includes(type)) {
@@ -105,13 +105,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Endereço de e-mail inválido ou malformado.' });
   }
 
+  // 3. Blindagem BOLA / IDOR para Envio de Convites:
+  // Se for convite, exige autenticação e autorização (somente PERSONAL ou MASTER)
+  if (type === 'INVITE') {
+    const authCtx = await authenticateRequest(req);
+    if (!authCtx) {
+      return res.status(401).json({
+        error: 'Autenticação necessária para despachar convites oficiais.',
+        code: 'UNAUTHENTICATED',
+      });
+    }
+
+    if (authCtx.role !== 'PERSONAL' && authCtx.role !== 'MASTER') {
+      return res.status(403).json({
+        error: 'Acesso negado: Apenas treinadores e administradores podem enviar convites.',
+        code: 'FORBIDDEN_INVITE_DISPATCH',
+      });
+    }
+
+    // Se informou inviteCode, valida se o convite realmente pertence ao treinador (BOLA check)
+    if (inviteCode && typeof inviteCode === 'string' && authCtx.role !== 'MASTER') {
+      try {
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data: inviteRow } = await supabaseAdmin
+          .from('invites')
+          .select('personal_id, created_by')
+          .eq('code', inviteCode.trim().toUpperCase())
+          .maybeSingle();
+
+        if (inviteRow && inviteRow.personal_id !== authCtx.user.id && inviteRow.created_by !== authCtx.user.id) {
+          return res.status(403).json({
+            error: 'Violação de BOLA: Proibido despachar convite criado por outro profissional.',
+            code: 'BOLA_INVITE_MISMATCH',
+          });
+        }
+      } catch (err) {
+        console.warn('[send-invite] Aviso na verificação do convite:', err);
+      }
+    }
+  }
+
   // Prevenção de Header Injection no assunto
   const cleanSubject = String(subject || 'FitCoach Pro • Notificação de Acesso')
     .replace(/[\r\n]+/g, ' ')
     .trim()
     .slice(0, 200);
 
-  // 3. Rate Limiting por Destinatário: máx 3 e-mails para o mesmo destinatário a cada 5 minutos
+  // 4. Rate Limiting por Destinatário: máx 3 e-mails para o mesmo destinatário a cada 5 minutos
   if (isRateLimited(`to_${cleanTo}`, 3, 5 * 60 * 1000)) {
     res.setHeader('Retry-After', '300');
     return res.status(429).json({
