@@ -15,6 +15,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { ThemeToggle } from '../common/ThemeToggle';
+import { sanitizeUrl } from '../../lib/security';
 
 export type PersonalTab = 'overview' | 'schedule' | 'students' | 'messages' | 'finances' | 'growth';
 
@@ -69,7 +70,7 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
         {/* Coach Profile Card */}
         <div className="p-3.5 mx-3.5 my-4 rounded-xl bg-zinc-900/60 border border-white/[0.06] flex items-center gap-3">
           <img
-            src={personal.avatarUrl}
+            src={sanitizeUrl(personal.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
             alt={personal.name}
             className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/30"
           />
@@ -155,7 +156,7 @@ export const PersonalLayout: React.FC<PersonalLayoutProps> = ({
 
         <div className="flex items-center gap-2">
           <img
-            src={personal.avatarUrl}
+            src={sanitizeUrl(personal.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
             alt={personal.name}
             className="w-8 h-8 rounded-full object-cover ring-1 ring-emerald-500/30"
           />

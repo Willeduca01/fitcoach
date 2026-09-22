@@ -3,6 +3,7 @@ import { useAppData } from '../../context/AppDataContext';
 import { Student } from '../../types';
 import { Badge } from '../common/Badge';
 import { StatCard } from '../common/StatCard';
+import { sanitizeUrl } from '../../lib/security';
 import {
   Flame,
   Calendar,
@@ -114,7 +115,7 @@ export const StudentHomeTab: React.FC<StudentHomeTabProps> = ({
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
-              src={student.avatarUrl}
+              src={sanitizeUrl(student.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
               alt={student.name}
               className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white/10 shadow-soft-card"
             />
@@ -157,7 +158,7 @@ export const StudentHomeTab: React.FC<StudentHomeTabProps> = ({
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-zinc-900/80 via-zinc-900/60 to-zinc-900/40 border border-white/[0.06] p-4 sm:p-5 shadow-soft-card backdrop-blur-md">
         <div className="flex items-start gap-3.5">
           <img
-            src={personal.avatarUrl}
+            src={sanitizeUrl(personal.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
             alt={personal.name}
             className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/30 shrink-0 mt-0.5"
           />
@@ -509,7 +510,7 @@ export const StudentHomeTab: React.FC<StudentHomeTabProps> = ({
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <img
-                    src={personal.avatarUrl}
+                    src={sanitizeUrl(personal.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
                     alt={personal.name}
                     className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10"
                   />

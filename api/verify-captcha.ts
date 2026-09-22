@@ -1,3 +1,5 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 // Serverless API Handler para Vercel: Validação Criptográfica do Cloudflare Turnstile CAPTCHA
 
 interface TurnstileVerifyResponse {
@@ -9,7 +11,7 @@ interface TurnstileVerifyResponse {
   cdata?: string;
 }
 
-function getClientIp(req: any): string {
+function getClientIp(req: VercelRequest): string {
   const forwarded = req.headers['x-forwarded-for'];
   let raw = '';
   if (typeof forwarded === 'string') {
@@ -17,12 +19,12 @@ function getClientIp(req: any): string {
   } else if (Array.isArray(forwarded)) {
     raw = forwarded[0].trim();
   } else {
-    raw = req.headers['x-real-ip'] || req.socket?.remoteAddress || '127.0.0.1';
+    raw = (req.headers['x-real-ip'] as string) || req.socket?.remoteAddress || '127.0.0.1';
   }
   return raw.replace(/^::ffff:/, '').trim() || '127.0.0.1';
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Headers estritos de segurança AppSec (OWASP)
   res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none';");
   res.setHeader('X-Content-Type-Options', 'nosniff');

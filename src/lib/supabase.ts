@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { InviteValidationResult, Invite } from '../types';
+import { sanitizePostgrestFilter } from './security';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://xmpbzpdggsonzftueynw.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -22,7 +23,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
  * Valida se um código de convite existe, está pendente e dentro da validade.
  */
 export async function validateInviteCode(code: string): Promise<InviteValidationResult> {
-  const cleanCode = code.trim().toUpperCase();
+  const cleanCode = sanitizePostgrestFilter(code).toUpperCase();
   if (!cleanCode) {
     return { valid: false };
   }

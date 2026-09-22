@@ -29,27 +29,31 @@ import {
 } from '../lib/rateLimiter';
 import { TurnstileCaptcha } from '../components/common/TurnstileCaptcha';
 import { verifyTurnstileToken } from '../lib/captcha';
+import { sanitizePostgrestFilter, isValidEmail } from '../lib/security';
 
 export const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { signUpWithInviteCode } = useAuth();
 
-  const urlInvite =
+  const rawInvite =
     searchParams.get('code') ||
     searchParams.get('convite') ||
     searchParams.get('invite') ||
     searchParams.get('token') ||
     '';
-  const urlEmail = searchParams.get('email') || '';
+  const rawEmail = searchParams.get('email') || '';
 
-  const [inviteCode, setInviteCode] = useState<string>(urlInvite.toUpperCase());
+  const cleanUrlInvite = sanitizePostgrestFilter(rawInvite).replace(/[^A-Z0-9-]/gi, '').toUpperCase();
+  const cleanUrlEmail = isValidEmail(rawEmail.trim().toLowerCase()) ? rawEmail.trim().toLowerCase() : '';
+
+  const [inviteCode, setInviteCode] = useState<string>(cleanUrlInvite);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [validationResult, setValidationResult] = useState<InviteValidationResult | null>(null);
 
   // Form State
   const [name, setName] = useState<string>('');
-  const [email, setEmail] = useState<string>(urlEmail);
+  const [email, setEmail] = useState<string>(cleanUrlEmail);
   const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -61,13 +65,13 @@ export const RegisterPage: React.FC = () => {
 
   // Validação automática se houver código na URL
   useEffect(() => {
-    if (urlEmail) {
-      setEmail(urlEmail);
+    if (cleanUrlEmail) {
+      setEmail(cleanUrlEmail);
     }
-    if (urlInvite) {
-      handleValidate(urlInvite, urlEmail);
+    if (cleanUrlInvite) {
+      handleValidate(cleanUrlInvite, cleanUrlEmail);
     }
-  }, [urlInvite, urlEmail]);
+  }, [cleanUrlInvite, cleanUrlEmail]);
 
   const handleValidate = async (codeToValidate: string, prefillEmail?: string) => {
     const code = codeToValidate.trim().toUpperCase();

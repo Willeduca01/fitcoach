@@ -19,12 +19,16 @@ ALTER TABLE public.rate_limit_logs ENABLE ROW LEVEL SECURITY;
 
 -- 2. Função de limpeza automática para manter a tabela leve (remove logs > 24h)
 CREATE OR REPLACE FUNCTION public.cleanup_old_rate_limits()
-RETURNS void AS $$
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     DELETE FROM public.rate_limit_logs
     WHERE created_at < NOW() - INTERVAL '24 hours';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- 3. Função Helper: check_and_record_rate_limit
 CREATE OR REPLACE FUNCTION public.check_and_record_rate_limit(
@@ -33,16 +37,20 @@ CREATE OR REPLACE FUNCTION public.check_and_record_rate_limit(
     p_max_attempts INT,
     p_window_seconds INT
 )
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     recent_attempts INT;
 BEGIN
-    -- Conta tentativas dentro da janela
+    -- Conta tentativas dentro da janela usando aritmética de intervalo segura (sem concatenação de strings)
     SELECT COUNT(*) INTO recent_attempts
     FROM public.rate_limit_logs
     WHERE action = p_action
       AND identifier = p_identifier
-      AND created_at > NOW() - (p_window_seconds || ' seconds')::INTERVAL;
+      AND created_at > NOW() - (p_window_seconds * INTERVAL '1 second');
 
     -- Se excedeu o limite permitido, recusa
     IF recent_attempts >= p_max_attempts THEN
@@ -60,7 +68,7 @@ BEGIN
 
     RETURN TRUE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- 4. Atualizar validate_invite com proteção de Rate Limit integrada
 CREATE OR REPLACE FUNCTION public.validate_invite(invite_code TEXT)
@@ -72,7 +80,11 @@ RETURNS TABLE (
     plan TEXT,
     personal_id UUID,
     personal_name TEXT
-) AS $$
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     found_invite RECORD;
     p_name TEXT;
@@ -121,4 +133,5 @@ BEGIN
         found_invite.personal_id,
         COALESCE(p_name, 'Personal Trainer');
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+

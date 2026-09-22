@@ -165,10 +165,11 @@ function emailServerPlugin(): Plugin {
             try {
               const body = JSON.parse(bodyStr || '{}');
               const { userId, email } = body;
-              if (!userId || !email) {
+              const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+              if (!userId || !email || !UUID_REGEX.test(String(userId).trim())) {
                 res.statusCode = 400;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: 'userId e email são obrigatórios.' }));
+                res.end(JSON.stringify({ error: 'userId (UUID v4) e email são obrigatórios e devem ser válidos.' }));
                 return;
               }
 
@@ -181,12 +182,12 @@ function emailServerPlugin(): Plugin {
 
               const { createClient } = await import('@supabase/supabase-js');
               const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-              const cleanEmail = email.trim().toLowerCase();
+              const cleanEmail = String(email).trim().toLowerCase();
 
               const { data: existingStudent, error: findError } = await supabaseAdmin
                 .from('students')
                 .select('id, name, user_id, personal_id')
-                .ilike('email', cleanEmail)
+                .eq('email', cleanEmail)
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -423,7 +424,7 @@ function emailServerPlugin(): Plugin {
 }
 
 const securityHeaders = {
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://*.amazonaws.com https:; media-src 'self' data: blob: https://*.supabase.co https://*.amazonaws.com https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://api64.ipify.org https://api.ipify.org https://*.amazonaws.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self';",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://*.amazonaws.com https:; media-src 'self' data: blob: https://*.supabase.co https://*.amazonaws.com https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://api64.ipify.org https://api.ipify.org https://*.amazonaws.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';",
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '0',

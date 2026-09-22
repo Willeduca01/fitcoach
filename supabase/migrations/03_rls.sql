@@ -4,14 +4,24 @@
 
 -- 1. Funções Helper para RLS
 CREATE OR REPLACE FUNCTION public.current_user_role()
-RETURNS TEXT AS $$
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
     SELECT role FROM public.profiles WHERE id = auth.uid();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$;
 
 CREATE OR REPLACE FUNCTION public.current_student_ids()
-RETURNS TABLE (id UUID) AS $$
+RETURNS TABLE (id UUID)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
     SELECT id FROM public.students WHERE user_id = auth.uid();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$;
 
 -- 2. Habilitar RLS em todas as tabelas
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

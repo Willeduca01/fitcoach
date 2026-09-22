@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { ThemeToggle } from '../common/ThemeToggle';
+import { sanitizeUrl } from '../../lib/security';
 
 export type StudentTab = 'home' | 'workout' | 'evolution' | 'payment' | 'contact';
 
@@ -65,7 +66,7 @@ export const StudentLayout: React.FC<StudentLayoutProps> = ({
           <div className="flex items-center gap-3">
             <div className="relative">
               <img
-                src={activeStudent?.avatarUrl}
+                src={sanitizeUrl(activeStudent?.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
                 alt={activeStudent?.name}
                 className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/30"
               />
@@ -146,7 +147,7 @@ export const StudentLayout: React.FC<StudentLayoutProps> = ({
       <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0d0d11]/90 backdrop-blur-xl border-b border-white/[0.06] sticky top-0 z-30">
         <div className="flex items-center gap-2.5">
           <img
-            src={activeStudent?.avatarUrl}
+            src={sanitizeUrl(activeStudent?.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}
             alt={activeStudent?.name}
             className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10"
           />

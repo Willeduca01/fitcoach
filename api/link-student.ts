@@ -33,8 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Formato de e-mail inválido.' });
   }
 
-  if (cleanUserId.length > 128 || /[\x00-\x1F\x7F]/.test(cleanUserId)) {
-    return res.status(400).json({ error: 'Identificador userId inválido.' });
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!UUID_REGEX.test(cleanUserId)) {
+    return res.status(400).json({ error: 'Identificador userId inválido (deve ser um UUID v4).' });
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,11 +49,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // 1. Procura registro de aluno na tabela students pelo e-mail
+    // 1. Procura registro de aluno na tabela students pelo e-mail (usando correspondência exata .eq)
     const { data: existingStudent, error: findError } = await supabaseAdmin
       .from('students')
       .select('id, name, user_id, personal_id')
-      .ilike('email', cleanEmail)
+      .eq('email', cleanEmail)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();

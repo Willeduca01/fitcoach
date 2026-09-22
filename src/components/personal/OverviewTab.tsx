@@ -2,6 +2,7 @@ import React from 'react';
 import { useAppData } from '../../context/AppDataContext';
 import { StatCard } from '../common/StatCard';
 import { Badge } from '../common/Badge';
+import { sanitizeUrl } from '../../lib/security';
 import {
   Users,
   DollarSign,
@@ -295,7 +296,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     <div className="flex items-center gap-2.5">
                       {student && (
                         <img
-                          src={student.avatarUrl}
+                          src={sanitizeUrl(student.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
                           alt={student.name}
                           className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10"
                         />

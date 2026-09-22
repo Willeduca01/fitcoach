@@ -3,6 +3,7 @@ import { Student, WorkoutRoutine, Exercise } from '../../types';
 import { useAppData } from '../../context/AppDataContext';
 import { Plus, Trash2, Dumbbell, Sparkles, Check, AlertCircle } from 'lucide-react';
 import { Modal } from '../common/Modal';
+import { sanitizeTextInput } from '../../lib/security';
 
 interface WorkoutBuilderProps {
   student: Student;
@@ -30,11 +31,12 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({ student }) => {
 
   const handleCreateRoutine = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRoutineName) return;
+    const cleanName = sanitizeTextInput(newRoutineName, 100);
+    if (!cleanName) return;
 
     addWorkoutRoutine(student.id, {
-      name: newRoutineName,
-      focus: newRoutineFocus || 'Geral',
+      name: cleanName,
+      focus: sanitizeTextInput(newRoutineFocus, 100) || 'Geral',
       exercises: []
     });
 
@@ -46,16 +48,17 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({ student }) => {
 
   const handleAddExercise = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!exerciseName || !currentRoutine) return;
+    const cleanExName = sanitizeTextInput(exerciseName, 100);
+    if (!cleanExName || !currentRoutine) return;
 
     const newExercise: Exercise = {
       id: `ex-${Date.now()}`,
-      name: exerciseName,
-      muscleGroup: exerciseMuscleGroup,
-      sets: Number(exerciseSets),
-      reps: exerciseReps,
-      load: exerciseLoad,
-      notes: exerciseNotes || undefined,
+      name: cleanExName,
+      muscleGroup: sanitizeTextInput(exerciseMuscleGroup, 50) || 'Geral',
+      sets: Math.max(1, Math.min(Number(exerciseSets) || 4, 50)),
+      reps: sanitizeTextInput(exerciseReps, 50) || '10 a 12',
+      load: sanitizeTextInput(exerciseLoad, 50) || '',
+      notes: exerciseNotes ? sanitizeTextInput(exerciseNotes, 500) : undefined,
       completed: false
     };
 

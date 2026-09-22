@@ -8,6 +8,7 @@ import { Badge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { StudentDetailModal } from './StudentDetailModal';
 import { InviteStudentModal } from './InviteStudentModal';
+import { sanitizeUrl } from '../../lib/security';
 import {
   Users,
   Plus,
@@ -261,7 +262,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3">
                       <img
-                        src={student.avatarUrl}
+                        src={sanitizeUrl(student.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
                         alt={student.name}
                         className="w-11 h-11 rounded-full object-cover ring-2 ring-white/10"
                       />

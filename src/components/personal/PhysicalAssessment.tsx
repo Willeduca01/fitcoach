@@ -30,16 +30,25 @@ export const PhysicalAssessment: React.FC<PhysicalAssessmentProps> = ({ student 
   const handleAddMeasurement = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const parseBounded = (val: string, min: number, max: number): number | undefined => {
+      const n = parseFloat(val);
+      if (isNaN(n)) return undefined;
+      return Math.max(min, Math.min(n, max));
+    };
+
+    const validWeight = parseBounded(weightKg, 20, 400) || 70;
+    const validHeight = parseBounded(heightCm, 50, 260) || 170;
+
     addMeasurement(student.id, {
-      date,
-      weightKg: Number(weightKg),
-      heightCm: Number(heightCm),
-      bodyFatPercentage: bodyFat ? Number(bodyFat) : undefined,
-      chestCm: chestCm ? Number(chestCm) : undefined,
-      armsCm: armsCm ? Number(armsCm) : undefined,
-      waistCm: waistCm ? Number(waistCm) : undefined,
-      hipsCm: hipsCm ? Number(hipsCm) : undefined,
-      thighsCm: thighsCm ? Number(thighsCm) : undefined,
+      date: date.slice(0, 10),
+      weightKg: validWeight,
+      heightCm: validHeight,
+      bodyFatPercentage: parseBounded(bodyFat, 1, 70),
+      chestCm: parseBounded(chestCm, 20, 250),
+      armsCm: parseBounded(armsCm, 10, 100),
+      waistCm: parseBounded(waistCm, 20, 250),
+      hipsCm: parseBounded(hipsCm, 20, 250),
+      thighsCm: parseBounded(thighsCm, 10, 150),
     });
 
     setIsAddModalOpen(false);

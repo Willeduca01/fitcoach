@@ -34,7 +34,11 @@ CREATE TRIGGER set_invoices_updated_at BEFORE UPDATE ON public.invoices
 
 -- 3. Trigger para criar perfil automaticamente no Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     user_role TEXT;
     user_name TEXT;
@@ -63,7 +67,8 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created

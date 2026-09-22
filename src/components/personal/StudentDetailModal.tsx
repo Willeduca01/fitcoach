@@ -181,7 +181,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       const targetUrl = cleanPhone
         ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
         : `https://api.whatsapp.com/send?text=${encoded}`;
-      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      window.open(sanitizeUrl(targetUrl), '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       setInviteFeedback({ type: 'error', message: err.message || 'Erro ao preparar link para WhatsApp.' });
     } finally {

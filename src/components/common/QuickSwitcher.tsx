@@ -4,6 +4,7 @@ import { useAppData } from '../../context/AppDataContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldAlert, User, RotateCcw, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { sanitizeUrl } from '../../lib/security';
 
 export const QuickSwitcher: React.FC = () => {
   const { role, currentStudentId, switchRole } = useAuth();
@@ -123,7 +124,7 @@ export const QuickSwitcher: React.FC = () => {
                     >
                       <div className="flex items-center gap-2 truncate">
                         <img
-                          src={student.avatarUrl}
+                          src={sanitizeUrl(student.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')}
                           alt={student.name}
                           className="w-5 h-5 rounded-full object-cover ring-1 ring-white/10"
                         />

@@ -1,3 +1,5 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 // Serverless API Handler para Vercel: Rate Limiting Multicamadas Robusto (IP + Conta/E-mail)
 
 export interface RateLimitConfig {
@@ -36,7 +38,7 @@ interface IpRecord {
 
 const serverStore = new Map<string, IpRecord>();
 
-function getClientIp(req: any): string {
+function getClientIp(req: VercelRequest): string {
   const forwarded = req.headers['x-forwarded-for'];
   let raw = '';
   if (typeof forwarded === 'string') {
@@ -44,7 +46,7 @@ function getClientIp(req: any): string {
   } else if (Array.isArray(forwarded)) {
     raw = forwarded[0].trim();
   } else {
-    raw = req.headers['x-real-ip'] || req.socket?.remoteAddress || '127.0.0.1';
+    raw = (req.headers['x-real-ip'] as string) || req.socket?.remoteAddress || '127.0.0.1';
   }
   return raw.replace(/^::ffff:/, '').trim() || '127.0.0.1';
 }
@@ -58,7 +60,7 @@ function getOrCreateRecord(key: string): IpRecord {
   return record;
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Headers de Segurança Estritos (OWASP)
   res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none';");
   res.setHeader('X-Content-Type-Options', 'nosniff');

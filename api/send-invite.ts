@@ -1,3 +1,4 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
 
 // Cache em memória para rastreamento de requisições na borda/servidor
@@ -50,7 +51,9 @@ function sanitizeEmailHtml(rawHtml: string): string {
 
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
 
-export default async function handler(req: any, res: any) {
+const ALLOWED_TYPES = ['PASSWORD_RESET', 'INVITE'];
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Headers de Segurança Estritos (OWASP)
   res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none';");
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -75,8 +78,16 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const { to, subject, type } = req.body || {};
+  const { to, subject, type, role } = req.body || {};
   let rawHtml = req.body?.html;
+
+  if (type && !ALLOWED_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'Tipo de e-mail não suportado.' });
+  }
+
+  if (role && !['trainer', 'student', 'PERSONAL', 'STUDENT'].includes(role)) {
+    return res.status(400).json({ error: 'Papel (role) de convite inválido.' });
+  }
 
   if (!to || !rawHtml || typeof rawHtml !== 'string') {
     return res.status(400).json({ error: 'Campos to e html são obrigatórios e devem ser válidos.' });

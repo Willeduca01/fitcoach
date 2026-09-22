@@ -138,3 +138,56 @@ export function sanitizeHeader(headerValue: string | undefined | null): string {
   if (!headerValue) return '';
   return String(headerValue).replace(/[\r\n]+/g, ' ').trim();
 }
+
+/**
+ * Validador estrito de identificador UUID v4 (RFC 4122).
+ * Previne injeções e parâmetros maliciosos em operações de banco por ID.
+ */
+export function isValidUuid(id: string | undefined | null): boolean {
+  if (!id) return false;
+  const clean = String(id).trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(clean);
+}
+
+/**
+ * Sanitiza valores passados para filtros dinâmicos do PostgREST / Supabase (.or(), .filter(), etc.).
+ * Remove caracteres de controle sintático do PostgREST que poderiam alterar a árvore
+ * de operadores lógicos (vírgulas, parênteses, pontos, dois-pontos e barras invertidas).
+ */
+export function sanitizePostgrestFilter(term: string | undefined | null): string {
+  if (!term) return '';
+  return String(term)
+    // Remove delimitadores sintáticos do PostgREST
+    .replace(/[(),.:\\"']/g, '')
+    // Remove caracteres de controle invisíveis
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .trim();
+}
+
+/**
+ * Escapa caracteres curinga (% e _) ao montar filtros de busca com .like() ou .ilike().
+ * Previne exploração de wildcards não intencionais e DoS em consultas complexas.
+ */
+export function escapePostgrestWildcards(term: string | undefined | null): string {
+  if (!term) return '';
+  return String(term)
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
+}
+
+/**
+ * Sanitiza campos de texto de formulários (rotinas, exercícios, observações)
+ * removendo caracteres de controle e limitando o tamanho máximo.
+ */
+export function sanitizeTextInput(
+  input: string | undefined | null,
+  maxLength = 500
+): string {
+  if (!input) return '';
+  return String(input)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .trim()
+    .slice(0, maxLength);
+}
