@@ -83,6 +83,7 @@ export const AppContent: React.FC = () => {
         <Route path="/ativar-convite" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/master" element={<MasterDashboardPage />} />
+        <Route path="/master/logs" element={<MasterDashboardPage defaultTab="LOGS" />} />
         <Route path="/dashboard" element={<PersonalDashboardPage />} />
         <Route path="/portal-aluno" element={<StudentPortalPage />} />
         <Route path="/" element={<RootRedirect />} />

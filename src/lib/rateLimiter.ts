@@ -4,6 +4,8 @@
  * troca de e-mail e spam em massa.
  */
 
+import { systemLogger } from './systemLogger';
+
 export type RateLimitAction = 'LOGIN' | 'INVITE_VALIDATION' | 'SIGNUP' | 'EMAIL_SEND';
 
 export interface RateLimitConfig {
@@ -222,6 +224,13 @@ export function recordAttempt(
     }
     notifyListeners();
 
+    systemLogger.info(
+      'AUTH',
+      'AUTH_OPERATION_SUCCESS',
+      `Operação [${action}] autorizada com sucesso. Chaves de bloqueio resetadas.`,
+      { identifier: specificKey, ip: cachedClientIp }
+    );
+
     // Notifica backend serverless
     try {
       const basePath = window.location.pathname.includes('/fitcoach') ? '/fitcoach' : '';
@@ -269,6 +278,22 @@ export function recordAttempt(
   }
 
   notifyListeners();
+
+  if (isLocked) {
+    systemLogger.critical(
+      'SECURITY',
+      'RATE_LIMIT_LOCKOUT',
+      `Acesso bloqueado por ${maxLockoutSec}s na ação [${action}]. Chaves protegidas por segurança.`,
+      { identifier: specificKey, ip: cachedClientIp, lockoutSeconds: maxLockoutSec }
+    );
+  } else {
+    systemLogger.warn(
+      'SECURITY',
+      'RATE_LIMIT_WARNING',
+      `Tentativa incorreta na ação [${action}]. Restam ${minRemaining} tentativa(s).`,
+      { identifier: specificKey, ip: cachedClientIp, remainingAttempts: minRemaining }
+    );
+  }
 
   // Notifica o backend serverless para travar por IP na infraestrutura
   try {

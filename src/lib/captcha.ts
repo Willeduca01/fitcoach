@@ -3,6 +3,8 @@
  * Comunicação com o endpoint serverless seguro /api/verify-captcha
  */
 
+import { systemLogger } from './systemLogger';
+
 export interface VerifyCaptchaResult {
   success: boolean;
   error?: string;
@@ -11,6 +13,7 @@ export interface VerifyCaptchaResult {
 
 export async function verifyTurnstileToken(token: string): Promise<VerifyCaptchaResult> {
   if (!token || typeof token !== 'string') {
+    systemLogger.warn('SECURITY', 'CAPTCHA_VERIFICATION_FAILED', 'Tentativa de validação com token ausente ou nulo.');
     return {
       success: false,
       error: 'Token do CAPTCHA não fornecido.',
@@ -19,6 +22,7 @@ export async function verifyTurnstileToken(token: string): Promise<VerifyCaptcha
 
   // Fallback seguro caso script falhe por bloqueador de rede
   if (token === 'bypass_offline_token') {
+    systemLogger.info('SECURITY', 'CAPTCHA_VERIFIED', 'Bypass offline ativado para ambiente de desenvolvimento local.');
     return { success: true };
   }
 
@@ -33,11 +37,18 @@ export async function verifyTurnstileToken(token: string): Promise<VerifyCaptcha
     const data = await res.json();
 
     if (res.ok && data.success) {
+      systemLogger.info('SECURITY', 'CAPTCHA_VERIFIED', 'Desafio Cloudflare Turnstile verificado com sucesso pelo backend.', {
+        timestamp: data.challengeTimestamp,
+      });
       return {
         success: true,
         challengeTimestamp: data.challengeTimestamp,
       };
     }
+
+    systemLogger.warn('SECURITY', 'CAPTCHA_VERIFICATION_FAILED', data.error || 'Falha na validação do token Turnstile.', {
+      errorCodes: data.errorCodes,
+    });
 
     return {
       success: false,
@@ -45,7 +56,7 @@ export async function verifyTurnstileToken(token: string): Promise<VerifyCaptcha
     };
   } catch (err: any) {
     console.warn('[Captcha] Erro de rede ao verificar token Turnstile:', err);
-    // Fallback resiliente para não travar a aplicação em ambientes locais offline
+    systemLogger.warn('NETWORK', 'NETWORK_OFFLINE', 'Falha de conexão com o servidor ao validar CAPTCHA.');
     return { success: true };
   }
 }

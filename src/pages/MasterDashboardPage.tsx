@@ -5,6 +5,7 @@ import { supabase, createPersonalInvite } from '../lib/supabase';
 import { sendInviteEmail } from '../services/emailService';
 import { ThemeToggle } from '../components/common/ThemeToggle';
 import { Badge } from '../components/common/Badge';
+import { DevLogsTab } from '../components/master/DevLogsTab';
 import {
   ShieldAlert,
   Users,
@@ -59,9 +60,16 @@ interface PersonalDevView {
   students: StudentDevView[];
 }
 
-export const MasterDashboardPage: React.FC = () => {
+export interface MasterDashboardPageProps {
+  defaultTab?: 'ACCOUNTS' | 'LOGS';
+}
+
+export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaultTab = 'ACCOUNTS' }) => {
   const { logout, user } = useAuth();
   const { students: localStudents, personal: localPersonal } = useAppData();
+
+  // Navigation Tab State (Contas x Logs de Telemetria)
+  const [activeTab, setActiveTab] = useState<'ACCOUNTS' | 'LOGS'>(defaultTab);
 
   // State
   const [trainers, setTrainers] = useState<PersonalDevView[]>([]);
@@ -335,10 +343,43 @@ export const MasterDashboardPage: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-8 space-y-8">
-        {/* Metric Cards Banner (Developer / Infrastructure Focused) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Professores */}
-          <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-white/[0.08] pb-1 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab('ACCOUNTS')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-semibold transition-all ${
+              activeTab === 'ACCOUNTS'
+                ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/10'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Gestão de Usuários & Convites</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('LOGS')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-semibold transition-all ${
+              activeTab === 'LOGS'
+                ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/10'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span>Logs & Diagnóstico do Sistema</span>
+          </button>
+        </div>
+
+        {activeTab === 'LOGS' ? (
+          <DevLogsTab />
+        ) : (
+          <>
+            {/* Metric Cards Banner (Developer / Infrastructure Focused) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Professores */}
+              <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
             <div className="flex items-center justify-between text-zinc-400">
               <span className="text-xs font-semibold uppercase tracking-wider">Professores Cadastrados</span>
               <Dumbbell className="w-4 h-4 text-amber-400" />
@@ -674,6 +715,8 @@ export const MasterDashboardPage: React.FC = () => {
             })}
           </div>
         </div>
+          </>
+        )}
       </main>
     </div>
   );
