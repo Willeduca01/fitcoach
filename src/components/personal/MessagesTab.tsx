@@ -4,6 +4,7 @@ import { Student, ChatMessage, ChatMedia } from '../../types';
 import { Badge } from '../common/Badge';
 import { MediaUploadModal } from '../common/MediaUploadModal';
 import { ChatMediaBubble } from '../common/ChatMediaBubble';
+import { StudentDetailModal } from './StudentDetailModal';
 import {
   MessageSquare,
   Search,
@@ -16,7 +17,8 @@ import {
   ChevronRight,
   Filter,
   CheckCircle2,
-  Clock
+  Clock,
+  FileText
 } from 'lucide-react';
 import { sanitizeUrl } from '../../lib/security';
 
@@ -42,6 +44,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   const [inputText, setInputText] = useState('');
   const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -310,8 +313,8 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
           {selectedStudent ? (
             <>
               {/* Thread Header */}
-              <div className="p-3 sm:p-3.5 border-b border-white/[0.06] flex items-center justify-between bg-zinc-900/80 rounded-t-2xl shrink-0">
-                <div className="flex items-center gap-2.5">
+              <div className="p-2.5 sm:p-3.5 border-b border-white/[0.06] flex items-center justify-between gap-2 bg-zinc-900/80 rounded-t-2xl shrink-0">
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
                   {/* Botão Voltar para mobile: Retorna para a lista de CRM */}
                   <button
                     type="button"
@@ -323,48 +326,56 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                     <ArrowLeft className="w-4 h-4" />
                   </button>
 
-                  <img
-                    src={sanitizeUrl(selectedStudent.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
-                    alt={selectedStudent.name}
-                    className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="font-semibold text-zinc-100 text-xs sm:text-sm truncate">
-                        {selectedStudent.name}
-                      </h3>
-                      <Badge
-                        variant={
-                          selectedStudent.paymentStatus === 'EM_DIA'
-                            ? 'success'
+                  {/* Avatar e Informações do Aluno (Clicável para abrir a ficha sem sair do chat) */}
+                  <div
+                    onClick={() => setIsDetailModalOpen(true)}
+                    className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 cursor-pointer group"
+                    title="Toque para ver a ficha completa do aluno"
+                  >
+                    <img
+                      src={sanitizeUrl(selectedStudent.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces')}
+                      alt={selectedStudent.name}
+                      className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 group-hover:ring-emerald-500/50 transition-all shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="font-semibold text-zinc-100 text-xs sm:text-sm truncate group-hover:text-emerald-300 transition-colors">
+                          {selectedStudent.name}
+                        </h3>
+                        <span
+                          className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded-full font-medium border ${
+                            selectedStudent.paymentStatus === 'EM_DIA'
+                              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                              : selectedStudent.paymentStatus === 'VENCE_EM_BREVE'
+                              ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                              : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                          }`}
+                        >
+                          {selectedStudent.paymentStatus === 'EM_DIA'
+                            ? 'Em dia'
                             : selectedStudent.paymentStatus === 'VENCE_EM_BREVE'
-                            ? 'warning'
-                            : 'danger'
-                        }
-                        size="sm"
-                      >
-                        {selectedStudent.paymentStatus === 'EM_DIA'
-                          ? 'Em dia'
-                          : selectedStudent.paymentStatus === 'VENCE_EM_BREVE'
-                          ? 'Vence em 3d'
-                          : 'Atrasado'}
-                      </Badge>
+                            ? 'Vence 3d'
+                            : 'Atrasado'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
+                        Meta: <span className="text-emerald-300 font-medium">{selectedStudent.primaryGoal || 'Condicionamento Geral'}</span>
+                      </p>
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate">
-                      Meta: <span className="text-emerald-300 font-medium">{selectedStudent.primaryGoal || 'Condicionamento Geral'}</span>
-                    </p>
                   </div>
                 </div>
 
-                {onOpenStudentDetail && (
-                  <button
-                    onClick={() => onOpenStudentDetail(selectedStudent)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-white/[0.08] text-xs font-medium text-zinc-200 transition-colors shrink-0"
-                  >
-                    <span>Ver Ficha</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                {/* Botão Ver Ficha Direto (Abre a ficha sem sair da conversa) */}
+                <button
+                  type="button"
+                  onClick={() => setIsDetailModalOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all shrink-0 active:scale-95 shadow-sm"
+                  title="Abrir exemplar da ficha do aluno"
+                >
+                  <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Ver </span>
+                  <span>Ficha</span>
+                </button>
               </div>
 
               {/* Messages Scroll Area */}
@@ -502,6 +513,13 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                 onSendMedia={(media, caption) => {
                   sendMessage(selectedStudent.id, 'PERSONAL', caption, 'GERAL', media);
                 }}
+              />
+
+              {/* Modal de Exemplar da Ficha do Aluno: abre diretamente sem sair da conversa */}
+              <StudentDetailModal
+                student={selectedStudent}
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
               />
             </>
           ) : (

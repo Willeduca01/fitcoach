@@ -61,10 +61,6 @@ export const PersonalDashboardPage: React.FC = () => {
       {currentTab === 'messages' && (
         <MessagesTab
           initialStudentId={chatStudentId}
-          onOpenStudentDetail={(student) => {
-            setSelectedStudentForModal(student);
-            setCurrentTab('students');
-          }}
         />
       )}
       {currentTab === 'finances' && <FinancesTab />}
