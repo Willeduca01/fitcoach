@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useAppData } from '../context/AppDataContext';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   checkRateLimit,
@@ -14,16 +13,11 @@ import { TurnstileCaptcha } from '../components/common/TurnstileCaptcha';
 import { verifyTurnstileToken } from '../lib/captcha';
 import {
   Dumbbell,
-  ShieldCheck,
   ShieldAlert,
-  User,
   ArrowRight,
   Lock,
   Mail,
   KeyRound,
-  Layers,
-  ChevronDown,
-  ChevronUp,
   AlertCircle,
   Loader2,
   Eye,
@@ -36,8 +30,7 @@ import {
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { loginAsPersonal, loginAsStudent, loginWithPassword, role } = useAuth();
-  const { students } = useAppData();
+  const { loginAsPersonal, loginWithPassword, role } = useAuth();
   const navigate = useNavigate();
 
   // Form State
@@ -50,10 +43,6 @@ export const LoginPage: React.FC = () => {
   const [failedAttempts, setFailedAttempts] = useState<number>(0);
   const [captchaToken, setCaptchaToken] = useState<string>('');
   const [remainingAttempts, setRemainingAttempts] = useState<number>(5);
-
-  // UI States
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id || 'student-1');
-  const [showDemoAccess, setShowDemoAccess] = useState(false);
 
   // Rate Limiting (IP + Conta)
   useEffect(() => {
@@ -247,16 +236,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handlePersonalDemoLogin = () => {
-    loginAsPersonal();
-    navigate('/dashboard');
-  };
-
-  const handleStudentDemoLogin = () => {
-    loginAsStudent(selectedStudentId);
-    navigate('/portal-aluno');
-  };
-
   return (
     <div className="min-h-screen bg-transparent text-zinc-100 flex flex-col justify-center items-center px-4 py-10 relative overflow-hidden font-sans select-none">
       <motion.div
@@ -436,77 +415,6 @@ export const LoginPage: React.FC = () => {
               <Link2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>Ativar meu acesso com Código de Convite</span>
             </Link>
-          </div>
-
-          {/* Accordion: Acesso Rápido de Teste (1 Clique) */}
-          <div className="pt-2 border-t border-white/[0.06] space-y-3">
-            <button
-              type="button"
-              onClick={() => setShowDemoAccess(!showDemoAccess)}
-              className="w-full flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-200 transition-colors py-1 cursor-pointer"
-            >
-              <span className="flex items-center gap-2 font-medium">
-                <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                Acesso Rápido de Teste (1 Clique)
-              </span>
-              {showDemoAccess ? (
-                <ChevronUp className="w-4 h-4 text-zinc-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-zinc-400" />
-              )}
-            </button>
-
-            <AnimatePresence>
-              {showDemoAccess && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-3 pt-1 overflow-hidden"
-                >
-                  {/* Demo Personal */}
-                  <button
-                    type="button"
-                    onClick={handlePersonalDemoLogin}
-                    className="w-full flex items-center justify-between p-3 rounded-xl bg-[#091312]/90 hover:bg-[#112320] border border-white/[0.06] text-zinc-200 text-xs font-medium transition-all group cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Entrar como Personal (Demo)</span>
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-zinc-400 group-hover:translate-x-1 transition-transform" />
-                  </button>
-
-                  {/* Demo Aluno */}
-                  <div className="space-y-2">
-                    <select
-                      value={selectedStudentId}
-                      onChange={(e) => setSelectedStudentId(e.target.value)}
-                      className="w-full bg-[#091110] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-emerald-500/50"
-                    >
-                      {students.map((student) => (
-                        <option key={student.id} value={student.id}>
-                          {student.name} ({student.paymentStatus === 'EM_DIA' ? 'Em dia' : 'Pendente'})
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={handleStudentDemoLogin}
-                      className="w-full flex items-center justify-between p-3 rounded-xl bg-[#091312]/90 hover:bg-[#112320] border border-white/[0.06] text-zinc-200 text-xs font-medium transition-all group cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <User className="w-4 h-4 text-teal-400" />
-                        <span>Entrar como Aluno Selecionado</span>
-                      </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-zinc-400 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
       </motion.div>
