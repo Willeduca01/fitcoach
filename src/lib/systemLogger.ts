@@ -65,6 +65,30 @@ export const DIAGNOSTIC_KNOWLEDGE_BASE: Record<
     action:
       'Verifique se as variáveis GMAIL_USER / GMAIL_APP_PASSWORD ou RESEND_API_KEY estão válidas no servidor local ou na Vercel.',
   },
+  EMAIL_SERVER_ERROR: {
+    cause:
+      'O endpoint serverless (/api/send-invite) retornou erro HTTP 500 ou resposta não-JSON (crash de runtime na Vercel).',
+    action:
+      'Local de origem: api/send-invite.ts. Verifique se GMAIL_USER e GMAIL_APP_PASSWORD estão adicionadas na Vercel e se o Redeploy mais recente foi concluído.',
+  },
+  GMAIL_SMTP_AUTH_ERROR: {
+    cause:
+      'O Google rejeitou o login SMTP (código 535-5.7.8). O usuário ou senha de aplicativo (16 letras) está incorreto ou a autenticação de 2 fatores foi revogada.',
+    action:
+      'Acesse myaccount.google.com/apppasswords, gere uma nova senha de aplicativo de 16 letras para o FitCoach e atualize a variável GMAIL_APP_PASSWORD na Vercel sem espaços.',
+  },
+  UNAUTHORIZED_ROUTE_ACCESS: {
+    cause:
+      'Um visitante ou usuário não autenticado tentou acessar diretamente a URL administrativa /master na barra de navegação.',
+    action:
+      'Defesa ativa RBAC: O RouteGuard interceptou o acesso e redirecionou para /login, impedindo vazamento de dados de desenvolvedor.',
+  },
+  UNAUTHORIZED_ROLE_ACCESS: {
+    cause:
+      'Um usuário logado tentou acessar um portal que exige um papel hierárquico superior (ex: aluno ou personal tentando acessar /master).',
+    action:
+      'O RouteGuard bloqueou o acesso e redirecionou o usuário para o seu portal correspondente.',
+  },
   AUTH_INVALID_CREDENTIALS: {
     cause:
       'O e-mail ou a senha informados não coincidem com nenhum usuário registrado na tabela auth.users do Supabase.',

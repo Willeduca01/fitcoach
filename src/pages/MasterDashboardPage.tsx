@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { supabase, createPersonalInvite } from '../lib/supabase';
@@ -32,7 +33,8 @@ import {
   Phone,
   ShieldCheck,
   Terminal,
-  Cpu
+  Cpu,
+  Loader2
 } from 'lucide-react';
 
 interface StudentDevView {
@@ -65,7 +67,7 @@ export interface MasterDashboardPageProps {
 }
 
 export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaultTab = 'ACCOUNTS' }) => {
-  const { logout, user } = useAuth();
+  const { role, isAuthenticated, loading, logout, user } = useAuth();
   const { students: localStudents, personal: localPersonal } = useAppData();
 
   // Navigation Tab State (Contas x Logs de Telemetria)
@@ -87,14 +89,42 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
   const [emailFeedback, setEmailFeedback] = useState<{
     type: 'success' | 'warning' | 'error';
     message: string;
+    technicalDetails?: {
+      status?: number;
+      statusText?: string;
+      endpoint?: string;
+      code?: string;
+      responseBody?: string;
+      location?: string;
+      timestamp?: string;
+    };
   } | null>(null);
+  const [showDevDetails, setShowDevDetails] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
 
-  // Carregar dados de desenvolvimento
+  // Carregar dados de desenvolvimento apenas se for MASTER autenticado
   useEffect(() => {
-    loadMasterDevData();
-  }, []);
+    if (isAuthenticated && role === 'MASTER') {
+      loadMasterDevData();
+    }
+  }, [isAuthenticated, role]);
+
+  // Bloqueio de rota no componente (Camada 2 de Segurança):
+  // Se ainda estiver checando a sessão, exibe loader
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a1312] text-zinc-100 flex flex-col items-center justify-center space-y-3 font-sans">
+        <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+        <p className="text-xs text-zinc-400 font-mono tracking-wider">Verificando credenciais Master...</p>
+      </div>
+    );
+  }
+
+  // Se não estiver autenticado ou não possuir papel MASTER, expulsa imediatamente para o login
+  if (!isAuthenticated || role !== 'MASTER') {
+    return <Navigate to="/login" replace />;
+  }
 
   const loadMasterDevData = async () => {
     setIsLoading(true);
@@ -249,6 +279,7 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
         role: 'trainer',
       });
 
+      setShowDevDetails(false);
       if (emailResult.success) {
         setEmailFeedback({
           type: 'success',
@@ -257,12 +288,14 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
       } else if (emailResult.resendDomainRestriction) {
         setEmailFeedback({
           type: 'warning',
-          message: `Convite gerado! Nota do Resend: Em modo de testes (sem domínio próprio cadastrado), os e-mails só são entregues para williamsilveira0204@gmail.com. Para enviar a outros e-mails, registre um domínio em resend.com/domains. O link direto está disponível abaixo.`,
+          message: `Convite gerado! Nota do Resend: Em modo de testes (sem domínio próprio cadastrado), os e-mails só são entregues para williamsilveira0204@gmail.com. Para enviar a outros e-mails, configure o Gmail SMTP ou registre um domínio. O link direto está disponível abaixo.`,
+          technicalDetails: emailResult.technicalDetails,
         });
       } else {
         setEmailFeedback({
           type: 'warning',
           message: `Convite salvo no banco, mas houve falha no envio por e-mail (${emailResult.error}). Copie o link abaixo ou envie no WhatsApp.`,
+          technicalDetails: emailResult.technicalDetails,
         });
       }
 
@@ -278,6 +311,10 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
       setEmailFeedback({
         type: 'warning',
         message: `Convite criado em modo de demonstração (${code}). Copie o link abaixo para enviar ao professor.`,
+        technicalDetails: {
+          location: 'src/pages/MasterDashboardPage.tsx:handleCreateInvite',
+          responseBody: 'Falha na conexão com Supabase. Modo fallback local ativado.',
+        },
       });
     } finally {
       setIsCreatingInvite(false);
@@ -463,13 +500,82 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
               ) : (
                 <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               )}
-              <div className="flex-1 space-y-1">
-                <div className="font-semibold">
-                  {emailFeedback.type === 'success'
-                    ? 'E-mail Enviado com Sucesso!'
-                    : 'Aviso sobre o Envio de E-mail'}
+              <div className="flex-1 space-y-1.5">
+                <div className="font-semibold flex items-center justify-between">
+                  <span>
+                    {emailFeedback.type === 'success'
+                      ? 'E-mail Enviado com Sucesso!'
+                      : 'Aviso sobre o Envio de E-mail'}
+                  </span>
+                  {emailFeedback.technicalDetails?.timestamp && (
+                    <span className="text-[10px] text-zinc-500 font-mono font-normal">
+                      {emailFeedback.technicalDetails.timestamp}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] leading-relaxed opacity-90">{emailFeedback.message}</p>
+
+                {/* Painel Expansível de Detalhes Técnicos & Localização para DEV */}
+                {emailFeedback.technicalDetails && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDevDetails(!showDevDetails)}
+                      className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-zinc-950/70 hover:bg-zinc-900 text-amber-300 flex items-center gap-1.5 transition-colors border border-amber-500/20"
+                    >
+                      <Terminal className="w-3 h-3 text-amber-400" />
+                      <span>{showDevDetails ? 'Ocultar Detalhes Técnicos (DEV)' : '🔍 Ver Detalhes Técnicos & Localização no Código (DEV)'}</span>
+                      {showDevDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+
+                    {showDevDetails && (
+                      <div className="mt-2.5 p-3 rounded-xl bg-zinc-950/90 border border-white/[0.08] text-[11px] font-mono space-y-2 text-zinc-300 animate-in fade-in duration-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-2 border-b border-white/[0.06]">
+                          <div>
+                            <span className="text-zinc-500 block text-[10px]">Origem no Código:</span>
+                            <span className="text-amber-400 font-bold">{emailFeedback.technicalDetails.location || 'src/services/emailService.ts'}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500 block text-[10px]">Endpoint / Status HTTP:</span>
+                            <span className="text-zinc-200">
+                              {emailFeedback.technicalDetails.endpoint || '/api/send-invite'}{' '}
+                              {emailFeedback.technicalDetails.status && (
+                                <strong className="text-rose-400 font-bold">({emailFeedback.technicalDetails.status} {emailFeedback.technicalDetails.statusText || ''})</strong>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {emailFeedback.technicalDetails.code && (
+                          <div>
+                            <span className="text-zinc-500 block text-[10px]">Código do Evento:</span>
+                            <span className="text-emerald-400">{emailFeedback.technicalDetails.code}</span>
+                          </div>
+                        )}
+
+                        {emailFeedback.technicalDetails.responseBody && (
+                          <div>
+                            <span className="text-zinc-500 block text-[10px]">Resposta Bruta do Servidor / Trace:</span>
+                            <pre className="mt-1 p-2 rounded-lg bg-zinc-900/90 border border-white/[0.04] text-[10px] text-zinc-300 max-h-32 overflow-y-auto whitespace-pre-wrap break-all">
+                              {emailFeedback.technicalDetails.responseBody}
+                            </pre>
+                          </div>
+                        )}
+
+                        <div className="pt-1 flex items-center justify-between text-[10px]">
+                          <span className="text-zinc-500">Gravado no módulo de telemetria</span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('LOGS')}
+                            className="text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1"
+                          >
+                            <span>Ir para a aba de Logs & Diagnóstico Completo →</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 type="button"
