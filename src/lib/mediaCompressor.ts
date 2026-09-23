@@ -7,6 +7,7 @@ import { sanitizeUrl, isSafeMediaUrl } from './security';
 
 export interface ProcessedImageResult {
   dataUrl: string;
+  blob?: Blob;
   originalSize: number;
   compressedSize: number;
   width: number;
@@ -145,14 +146,32 @@ export async function compressImage(
         const base64Data = safeDataUrl.split(',')[1] || '';
         const compressedSize = Math.round((base64Data.length * 3) / 4);
 
-        resolve({
-          dataUrl: safeDataUrl,
-          originalSize: file.size,
-          compressedSize,
-          width,
-          height,
-          format,
-        });
+        if (canvas.toBlob) {
+          canvas.toBlob(
+            (blob) => {
+              resolve({
+                dataUrl: safeDataUrl,
+                blob: blob || undefined,
+                originalSize: file.size,
+                compressedSize: blob ? blob.size : compressedSize,
+                width,
+                height,
+                format,
+              });
+            },
+            format,
+            quality
+          );
+        } else {
+          resolve({
+            dataUrl: safeDataUrl,
+            originalSize: file.size,
+            compressedSize,
+            width,
+            height,
+            format,
+          });
+        }
       };
 
       img.onerror = () => reject(new Error('Erro ao carregar a imagem para compressão'));
