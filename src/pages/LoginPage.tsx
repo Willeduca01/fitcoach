@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { MasterInviteModal } from '../components/common/MasterInviteModal';
 import {
   checkRateLimit,
   recordAttempt,
@@ -27,7 +26,6 @@ import {
   ChevronUp,
   AlertCircle,
   Loader2,
-  Cpu,
   Eye,
   EyeOff,
   HeartPulse,
@@ -56,7 +54,6 @@ export const LoginPage: React.FC = () => {
   // UI States
   const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id || 'student-1');
   const [showDemoAccess, setShowDemoAccess] = useState(false);
-  const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
 
   // Rate Limiting (IP + Conta)
   useEffect(() => {
@@ -512,25 +509,7 @@ export const LoginPage: React.FC = () => {
             </AnimatePresence>
           </div>
         </div>
-
-        {/* Link Painel do Desenvolvedor */}
-        <div className="text-center pt-1">
-          <button
-            type="button"
-            onClick={() => setIsMasterModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#101b19]/70 hover:bg-[#152724] text-[11px] font-mono text-zinc-400 hover:text-amber-400 border border-white/[0.05] transition-colors cursor-pointer"
-          >
-            <Cpu className="w-3.5 h-3.5 text-amber-400" />
-            <span>Painel do Desenvolvedor: Convidar Treinador</span>
-          </button>
-        </div>
       </motion.div>
-
-      {/* Modal do Desenvolvedor Master */}
-      <MasterInviteModal
-        isOpen={isMasterModalOpen}
-        onClose={() => setIsMasterModalOpen(false)}
-      />
     </div>
   );
 };
