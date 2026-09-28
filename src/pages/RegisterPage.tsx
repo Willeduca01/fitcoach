@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { validateInviteCode } from '../lib/supabase';
+import { validateInviteCode } from '../lib/neon';
 import { InviteValidationResult } from '../types';
 import {
   Dumbbell,

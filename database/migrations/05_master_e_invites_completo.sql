@@ -1,6 +1,6 @@
 -- ============================================================================
 -- FITCOACH PRO — CRIAÇÃO DA TABELA INVITES + PAPEL MASTER + POLÍTICAS COMPLETAS
--- (Execute este bloco completo no SQL Editor do Supabase)
+-- (Execute este bloco completo no SQL Editor do Neon Postgres)
 -- ============================================================================
 
 -- 1. Criar a Tabela de Convites (caso ainda não exista)

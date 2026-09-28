@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
-import { authenticateRequest, getSupabaseAdmin } from './_utils/auth';
+import { authenticateRequest } from './_utils/auth';
 
 // Cache em memória para rastreamento de requisições na borda/servidor
 const rateLimitMap = new Map<string, number[]>();
@@ -140,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: 'Autenticação necessária para despachar convites oficiais.',
           code: 'UNAUTHENTICATED',
           location: 'api/send-invite.ts',
-          details: 'Nenhum token JWT válido do Supabase foi fornecido no cabeçalho Authorization ou SUPABASE_SERVICE_ROLE_KEY não está configurada.',
+          details: 'Nenhum token JWT ou credencial válida foi fornecido no cabeçalho Authorization.',
         });
       }
 
@@ -156,22 +156,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Se informou inviteCode, valida se o convite realmente pertence ao treinador (BOLA check)
       if (inviteCode && typeof inviteCode === 'string' && authCtx.role !== 'MASTER') {
         try {
-          const supabaseAdmin = getSupabaseAdmin();
-          const { data: inviteRow } = await supabaseAdmin
-            .from('invites')
-            .select('personal_id, created_by')
-            .eq('code', inviteCode.trim().toUpperCase())
-            .maybeSingle();
-
-          if (inviteRow && inviteRow.personal_id !== authCtx.user.id && inviteRow.created_by !== authCtx.user.id) {
-            return res.status(403).json({
-              error: 'Violação de BOLA: Proibido despachar convite criado por outro profissional.',
-              code: 'BOLA_INVITE_MISMATCH',
-              location: 'api/send-invite.ts',
-            });
+          const { neon } = await import('@neondatabase/serverless');
+          const dbUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+          if (dbUrl) {
+            const sql = neon(dbUrl);
+            const inviteRows = await sql`
+              SELECT personal_id, created_by
+              FROM public.invites
+              WHERE UPPER(code) = ${inviteCode.trim().toUpperCase()}
+              LIMIT 1
+            `;
+            if (inviteRows.length > 0) {
+              const inviteRow = inviteRows[0];
+              if (inviteRow.personal_id !== authCtx.user.id && inviteRow.created_by !== authCtx.user.id) {
+                return res.status(403).json({
+                  error: 'Violação de BOLA: Proibido despachar convite criado por outro profissional.',
+                  code: 'BOLA_INVITE_MISMATCH',
+                  location: 'api/send-invite.ts',
+                });
+              }
+            }
           }
         } catch (err) {
-          console.warn('[send-invite] Aviso na verificação do convite:', err);
+          console.warn('[send-invite] Aviso na verificação do convite via Neon:', err);
         }
       }
     }
@@ -195,36 +202,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Higienização de segurança do HTML antes de despachar
     let html = sanitizeEmailHtml(rawHtml);
 
-    // Se for redefinição de senha, gera o link seguro com token criptográfico do Supabase
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://xmpbzpdggsonzftueynw.supabase.co';
-
-    if (type === 'PASSWORD_RESET' && serviceRoleKey) {
+    // Se for redefinição de senha, gera link com token seguro no Neon Postgres
+    if (type === 'PASSWORD_RESET') {
       try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-        const origin = req.headers.origin || 'https://fitcoach-willtec.vercel.app';
-        const basePath = process.env.VERCEL ? '' : '/fitcoach';
-        const redirectTo = `${origin}${basePath}/?type=recovery`;
+        const { neon } = await import('@neondatabase/serverless');
+        const dbUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+        if (dbUrl) {
+          const sql = neon(dbUrl);
+          const crypto = await import('crypto');
+          const resetToken = crypto.randomBytes(24).toString('hex');
+          const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
-        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-          type: 'recovery',
-          email: cleanTo,
-          options: { redirectTo },
-        });
+          await sql`
+            CREATE TABLE IF NOT EXISTS public.password_resets (
+              email TEXT PRIMARY KEY,
+              token TEXT NOT NULL,
+              expires_at TIMESTAMPTZ NOT NULL,
+              created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+          `;
 
-        if (!linkError && linkData?.properties?.action_link) {
-          const actionLink = linkData.properties.action_link;
-          if (/^https?:\/\//i.test(actionLink)) {
-            const safeActionLink = actionLink.replace(/"/g, '&quot;');
-            html = html.replaceAll('__FITCOACH_RESET_URL__', safeActionLink);
-            html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, safeActionLink);
-            html = html.replace(/href=""/g, `href="${safeActionLink}"`);
-            html = html.replace(/href=''/g, `href='${safeActionLink}'`);
-          }
+          await sql`
+            INSERT INTO public.password_resets (email, token, expires_at)
+            VALUES (${cleanTo}, ${resetToken}, ${expiresAt.toISOString()})
+            ON CONFLICT (email) DO UPDATE
+            SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, created_at = NOW();
+          `;
+
+          const origin = req.headers.origin || 'https://fitcoach-willtec.vercel.app';
+          const basePath = process.env.VERCEL ? '' : '/fitcoach';
+          const safeActionLink = `${origin}${basePath}/#/redefinir-senha?token=${resetToken}&email=${encodeURIComponent(cleanTo)}`;
+
+          html = html.replaceAll('__FITCOACH_RESET_URL__', safeActionLink);
+          html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, safeActionLink);
+          html = html.replace(/href=""/g, `href="${safeActionLink}"`);
+          html = html.replace(/href=''/g, `href='${safeActionLink}'`);
         }
       } catch (adminErr) {
-        console.warn('[API Send Invite] Erro Supabase Admin generateLink:', adminErr);
+        console.warn('[API Send Invite] Erro ao gerar token de recuperação no Neon:', adminErr);
       }
     }
 

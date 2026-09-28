@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import {
   Dumbbell,
   Lock,
@@ -19,7 +18,7 @@ import {
 import confetti from 'canvas-confetti';
 
 export const ResetPasswordPage: React.FC = () => {
-  const { updatePassword } = useAuth();
+  const { updatePassword, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -33,18 +32,18 @@ export const ResetPasswordPage: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [countdown, setCountdown] = useState(5);
 
-  const emailHint = searchParams.get('email') || '';
+  const tokenParam = searchParams.get('token') || '';
+  const emailParam = searchParams.get('email') || user?.email || '';
 
-  // Verificação e estabelecimento de sessão de recuperação
+  // Verificação e estabelecimento de sessão de recuperação via Neon
   useEffect(() => {
     let isMounted = true;
 
     const initRecoverySession = async () => {
       setIsVerifyingSession(true);
 
-      // 1. Verifica se já existe sessão ativa
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      // 1. Se já está logado
+      if (isAuthenticated) {
         if (isMounted) {
           setHasValidSession(true);
           setIsVerifyingSession(false);
@@ -52,113 +51,38 @@ export const ResetPasswordPage: React.FC = () => {
         return;
       }
 
-      // 2. Extrai tokens da URL (suporta hash e search parameters)
-      const fullHash = window.location.hash || '';
-      const fullSearch = window.location.search || '';
-
-      // Verifica PKCE code (?code=...)
-      let code = searchParams.get('code');
-      if (!code && fullHash.includes('code=')) {
-        const hashQuery = fullHash.split('?')[1] || '';
-        const hashParams = new URLSearchParams(hashQuery);
-        code = hashParams.get('code');
-      }
-
-      if (code) {
+      // 2. Se veio com token de recuperação na URL
+      if (tokenParam) {
         try {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (!error && data.session) {
-            if (isMounted) {
-              setHasValidSession(true);
-              setIsVerifyingSession(false);
-            }
-            return;
-          }
-        } catch (e) {
-          console.warn('[ResetPassword] Erro ao trocar code:', e);
-        }
-      }
-
-      // Verifica access_token e refresh_token no hash
-      if (fullHash.includes('access_token=')) {
-        const hashParts = fullHash.split('#');
-        for (const part of hashParts) {
-          if (part.includes('access_token=')) {
-            const tokenParams = new URLSearchParams(part);
-            const accessToken = tokenParams.get('access_token');
-            const refreshToken = tokenParams.get('refresh_token');
-            if (accessToken && refreshToken) {
-              try {
-                const { data, error } = await supabase.auth.setSession({
-                  access_token: accessToken,
-                  refresh_token: refreshToken,
-                });
-                if (!error && data.session) {
-                  if (isMounted) {
-                    setHasValidSession(true);
-                    setIsVerifyingSession(false);
-                  }
-                  return;
-                }
-              } catch (e) {
-                console.warn('[ResetPassword] Erro ao setar sessão via hash:', e);
-              }
-            }
-          }
-        }
-      }
-
-      // 3. Verifica token_hash (fluxo de verifyOtp)
-      let tokenHash = searchParams.get('token_hash');
-      if (!tokenHash && fullHash.includes('token_hash=')) {
-        const hashQuery = fullHash.split('?')[1] || '';
-        const hashParams = new URLSearchParams(hashQuery);
-        tokenHash = hashParams.get('token_hash');
-      }
-
-      if (tokenHash) {
-        try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: 'recovery',
+          const res = await fetch('/api/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'VERIFY', token: tokenParam }),
           });
-          if (!error && data.session) {
-            if (isMounted) {
-              setHasValidSession(true);
-              setIsVerifyingSession(false);
-            }
-            return;
-          }
-        } catch (e) {
-          console.warn('[ResetPassword] Erro ao verificar OTP token_hash:', e);
-        }
-      }
-
-      // 4. Escuta evento PASSWORD_RECOVERY do Supabase
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-        if (event === 'PASSWORD_RECOVERY' || (newSession && event === 'SIGNED_IN')) {
+          const json = await res.json().catch(() => ({}));
           if (isMounted) {
-            setHasValidSession(true);
+            setHasValidSession(Boolean(json.valid));
             setIsVerifyingSession(false);
           }
+          return;
+        } catch (err) {
+          console.warn('[ResetPassword] Erro ao verificar token:', err);
         }
-      });
+      }
 
-      // Se após 1.5 segundos não houver sessão nem token, encerra verificação
-      setTimeout(() => {
+      // 3. Se veio com email ou flag de recuperação
+      if (emailParam || sessionStorage.getItem('fitcoach_password_recovery') === 'true') {
         if (isMounted) {
-          supabase.auth.getSession().then(({ data: { session: finalSession } }) => {
-            if (isMounted) {
-              setHasValidSession(Boolean(finalSession));
-              setIsVerifyingSession(false);
-            }
-          });
+          setHasValidSession(true);
+          setIsVerifyingSession(false);
         }
-      }, 1500);
+        return;
+      }
 
-      return () => {
-        subscription.unsubscribe();
-      };
+      if (isMounted) {
+        setHasValidSession(false);
+        setIsVerifyingSession(false);
+      }
     };
 
     initRecoverySession();
@@ -166,7 +90,7 @@ export const ResetPasswordPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAuthenticated, tokenParam, emailParam]);
 
   // Redirecionamento automático após sucesso
   useEffect(() => {
@@ -206,7 +130,7 @@ export const ResetPasswordPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const res = await updatePassword(password);
+      const res = await updatePassword(password, tokenParam, emailParam);
       if (!res.success) {
         setErrorMessage(res.error || 'Falha ao redefinir a senha.');
         setIsLoading(false);
@@ -333,7 +257,7 @@ export const ResetPasswordPage: React.FC = () => {
                   <span>Cadastrar Nova Senha</span>
                 </h2>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  {emailHint ? `Conta: ${emailHint}. ` : ''}Escolha uma combinação segura de no mínimo 6 caracteres.
+                  {emailParam ? `Conta: ${emailParam}. ` : ''}Escolha uma combinação segura de no mínimo 6 caracteres.
                 </p>
               </div>
 

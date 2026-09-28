@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Modal } from './Modal';
-import { createPersonalInvite } from '../../lib/supabase';
+import { createPersonalInvite } from '../../lib/neon';
 import {
   ShieldAlert,
   Copy,

@@ -181,9 +181,8 @@ export function isValidUuid(id: string | undefined | null): boolean {
 }
 
 /**
- * Sanitiza valores passados para filtros dinâmicos do PostgREST / Supabase (.or(), .filter(), etc.).
- * Remove caracteres de controle sintático do PostgREST que poderiam alterar a árvore
- * de operadores lógicos (vírgulas, parênteses, pontos, dois-pontos e barras invertidas).
+ * Sanitiza valores de filtros e códigos contra injeções e caracteres de controle
+ * (vírgulas, parênteses, pontos, dois-pontos e barras invertidas).
  */
 export function sanitizePostgrestFilter(term: string | undefined | null): string {
   if (!term) return '';

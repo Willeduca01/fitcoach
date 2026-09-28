@@ -1,5 +1,4 @@
 import { Student, WorkoutRoutine, Invoice, SessionSchedule, ChatMessage, UserRole } from '../types';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { isValidUuid } from './security';
 
 /**
@@ -11,9 +10,10 @@ export interface AuthUserInfo {
   id: string;
   role?: UserRole | string;
   email?: string | null;
+  user_metadata?: { role?: string; [key: string]: any };
 }
 
-export type AuthUserTarget = SupabaseUser | AuthUserInfo;
+export type AuthUserTarget = AuthUserInfo;
 
 /**
  * Valida se um identificador é seguro (UUID v4 ou identificador mock do sistema)

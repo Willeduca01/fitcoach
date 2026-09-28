@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppData } from '../../context/AppDataContext';
 import { useAuth } from '../../context/AuthContext';
-import { createStudentInvite } from '../../lib/supabase';
+import { createStudentInvite } from '../../lib/neon';
 import { sendInviteEmail } from '../../services/emailService';
 import { Student, PlanType, StudentStatus, PaymentStatus } from '../../types';
 import { Badge } from '../common/Badge';

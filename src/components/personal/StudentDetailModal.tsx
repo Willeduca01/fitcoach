@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Student, PlanType, PaymentStatus, StudentStatus } from '../../types';
 import { useAppData } from '../../context/AppDataContext';
 import { useAuth } from '../../context/AuthContext';
-import { supabase, createStudentInvite } from '../../lib/supabase';
+import { createStudentInvite } from '../../lib/neon';
 import { sendInviteEmail } from '../../services/emailService';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
@@ -82,29 +82,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       return { code: inviteCode, url: inviteUrl };
     }
 
-    // 1. Tenta buscar convite existente pendente para este e-mail
-    if (cleanEmail) {
-      try {
-        const { data: existing } = await supabase
-          .from('invites')
-          .select('code')
-          .eq('personal_id', personalId)
-          .eq('target_email', cleanEmail)
-          .eq('status', 'PENDENTE')
-          .maybeSingle();
-
-        if (existing?.code) {
-          const url = `${window.location.origin}${basePath}/#/ativar-convite?code=${existing.code}&email=${encodeURIComponent(cleanEmail)}`;
-          setInviteCode(existing.code);
-          setInviteUrl(url);
-          return { code: existing.code, url };
-        }
-      } catch (e) {
-        console.warn('[StudentDetailModal] Erro ao buscar convite existente:', e);
-      }
-    }
-
-    // 2. Cria novo convite no Supabase
+    // 1. Cria ou obtém convite oficial no Neon Postgres
     try {
       const invite = await createStudentInvite({
         personalId,

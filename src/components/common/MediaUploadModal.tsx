@@ -194,17 +194,17 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           </div>
         )}
 
-        {/* Loading State durante Upload para Supabase Storage */}
+        {/* Loading State durante Upload de Mídia */}
         {isUploading && (
           <div className="flex flex-col items-center justify-center p-8 space-y-3 bg-zinc-900/60 rounded-2xl border border-emerald-500/20">
             <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
             <div className="text-center space-y-1">
               <p className="text-xs text-zinc-200 font-semibold flex items-center justify-center gap-1.5">
                 <CloudUpload className="w-4 h-4 text-emerald-400" />
-                <span>Enviando para o Supabase Storage (chat-media)...</span>
+                <span>Processando mídia com segurança...</span>
               </p>
               <p className="text-[11px] text-zinc-400">
-                Otimizando armazenamento e gerando link seguro...
+                Otimizando arquivo e gerando link seguro...
               </p>
             </div>
           </div>

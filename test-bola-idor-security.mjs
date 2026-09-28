@@ -33,7 +33,7 @@ console.log('\n🛡️  INICIANDO SUÍTE DE TESTES OWASP APPSEC: BOLA & IDOR HAR
 // ============================================================================
 console.log('📌 Teste 1: Auditoria Estrita de RLS e Políticas SQL Anti-BOLA');
 
-const migrationPath = path.join(rootDir, 'supabase', 'migrations', '09_bola_idor_hardening.sql');
+const migrationPath = path.join(rootDir, 'database', 'migrations', '09_bola_idor_hardening.sql');
 assert(fs.existsSync(migrationPath), 'Migration 09_bola_idor_hardening.sql deve existir');
 
 const migrationSql = fs.readFileSync(migrationPath, 'utf8');

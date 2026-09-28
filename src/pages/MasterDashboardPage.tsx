@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
-import { supabase, createPersonalInvite } from '../lib/supabase';
+import { createPersonalInvite } from '../lib/neon';
 import { sendInviteEmail } from '../services/emailService';
 import { ThemeToggle } from '../components/common/ThemeToggle';
 import { Badge } from '../components/common/Badge';
@@ -129,63 +129,56 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
   const loadMasterDevData = async () => {
     setIsLoading(true);
     try {
-      // 1. Busca todos os perfis com role = 'PERSONAL'
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, name, email, phone, created_at, updated_at, personal_profiles(title, cref)')
-        .eq('role', 'PERSONAL');
-
-      // 2. Busca todos os alunos cadastrados
-      const { data: allStudentsData } = await supabase
-        .from('students')
-        .select('id, personal_id, name, email, phone, plan, status, start_date, created_at, updated_at');
-
-      // 3. Busca métricas de convites
-      const { data: allInvites } = await supabase
-        .from('invites')
-        .select('status');
-
-      if (allInvites) {
-        const total = allInvites.length;
-        const used = allInvites.filter((i) => i.status === 'USADO').length;
-        const pending = allInvites.filter((i) => i.status === 'PENDENTE').length;
-        setInvitesCount({ total, pending, used });
+      let res = await fetch('/api/master-data').catch(() => null);
+      if (!res || res.status === 404) {
+        res = await fetch('/fitcoach/api/master-data').catch(() => null);
       }
 
-      if (!profilesError && profilesData && profilesData.length > 0) {
-        const mappedTrainers: PersonalDevView[] = profilesData.map((p: any) => {
-          const personalInfo = Array.isArray(p.personal_profiles) ? p.personal_profiles[0] : p.personal_profiles;
-          const assignedStudents = (allStudentsData || [])
-            .filter((s: any) => s.personal_id === p.id)
-            .map((s: any) => ({
-              id: s.id,
-              name: s.name,
-              email: s.email || 'Não informado',
-              phone: s.phone || 'Não informado',
-              plan: s.plan || 'MENSAL',
-              status: s.status || 'ATIVO',
-              startDate: formatDate(s.start_date || s.created_at),
-              lastAccess: formatRelativeTime(s.updated_at || s.created_at),
-            }));
+      if (res && res.ok) {
+        const json = await res.json();
+        const profilesData = json.trainers || [];
+        const allStudentsData = json.students || [];
+        const allInvites = json.invites || [];
 
-          return {
-            id: p.id,
-            name: p.name,
-            email: p.email,
-            phone: p.phone,
-            cref: personalInfo?.cref || 'CREF Verificado',
-            title: personalInfo?.title || 'Personal Trainer',
-            planType: 'PRO ILIMITADO',
-            accountStatus: 'ATIVO',
-            createdAt: formatDate(p.created_at),
-            lastAccess: formatRelativeTime(p.updated_at || p.created_at),
-            students: assignedStudents,
-          };
-        });
+        const total = allInvites.length;
+        const used = allInvites.filter((i: any) => i.status === 'USADO').length;
+        const pending = allInvites.filter((i: any) => i.status === 'PENDENTE').length;
+        setInvitesCount({ total, pending, used });
 
-        setTrainers(mappedTrainers);
-        if (mappedTrainers.length > 0) {
-          setExpandedTrainerId(mappedTrainers[0].id);
+        if (profilesData && profilesData.length > 0) {
+          const mappedTrainers: PersonalDevView[] = profilesData.map((p: any) => {
+            const assignedStudents = (allStudentsData || [])
+              .filter((s: any) => s.personal_id === p.id)
+              .map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                email: s.email || 'Não informado',
+                phone: s.phone || 'Não informado',
+                plan: s.plan || 'MENSAL',
+                status: s.status || 'ATIVO',
+                startDate: formatDate(s.start_date || s.created_at),
+                lastAccess: formatRelativeTime(s.updated_at || s.created_at),
+              }));
+
+            return {
+              id: p.id,
+              name: p.name,
+              email: p.email,
+              phone: p.phone,
+              cref: p.cref || 'CREF Verificado',
+              title: p.title || 'Personal Trainer',
+              planType: 'PRO ILIMITADO',
+              accountStatus: 'ATIVO',
+              createdAt: formatDate(p.created_at),
+              lastAccess: formatRelativeTime(p.updated_at || p.created_at),
+              students: assignedStudents,
+            };
+          });
+
+          setTrainers(mappedTrainers);
+          if (mappedTrainers.length > 0) {
+            setExpandedTrainerId(mappedTrainers[0].id);
+          }
         }
       } else {
         // Fallback estruturado para demonstração local
@@ -255,7 +248,7 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
     setEmailFeedback(null);
 
     try {
-      // 1. Gera registro de convite no Supabase com role de treinador
+      // 1. Gera registro de convite no Neon Postgres com role de treinador
       const invite = await createPersonalInvite({
         targetName: cleanName,
         targetEmail: cleanEmail,
@@ -310,10 +303,10 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
       setGeneratedInvite({ code, url, sentEmail: cleanEmail });
       setEmailFeedback({
         type: 'warning',
-        message: `Convite criado em modo de demonstração (${code}). Copie o link abaixo para enviar ao professor.`,
+        message: `Convite criado em modo de contingência (${code}). Copie o link abaixo para enviar ao professor.`,
         technicalDetails: {
           location: 'src/pages/MasterDashboardPage.tsx:handleCreateInvite',
-          responseBody: 'Falha na conexão com Supabase. Modo fallback local ativado.',
+          responseBody: 'Falha na conexão com banco de dados. Modo de contingência local ativado.',
         },
       });
     } finally {
@@ -456,7 +449,7 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
             </p>
           </div>
 
-          {/* Card 4: Status do Sistema / Supabase */}
+          {/* Card 4: Status do Sistema / Neon Postgres */}
           <div className="p-5 rounded-3xl bg-zinc-900/80 border border-white/[0.08] backdrop-blur-xl space-y-2">
             <div className="flex items-center justify-between text-zinc-400">
               <span className="text-xs font-semibold uppercase tracking-wider">Status do Banco</span>
@@ -464,9 +457,9 @@ export const MasterDashboardPage: React.FC<MasterDashboardPageProps> = ({ defaul
             </div>
             <div className="text-xl font-bold text-emerald-400 tracking-tight flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>PostgreSQL • RLS</span>
+              <span>Neon Postgres • RLS</span>
             </div>
-            <p className="text-[11px] text-zinc-400 font-mono">Supabase Auth • Ativo</p>
+            <p className="text-[11px] text-zinc-400 font-mono">Neon Serverless • Conectado</p>
           </div>
         </div>
 

@@ -111,7 +111,7 @@ assert(
 
 // 3. Auditoria Estática de Migrations SQL
 console.log('\n[TESTE 3] Auditoria de Migrations SQL e Search Path Hijacking (CWE-426)...');
-const migration08Path = path.join(projectRoot, 'supabase', 'migrations', '08_security_hardening.sql');
+const migration08Path = path.join(projectRoot, 'database', 'migrations', '08_security_hardening.sql');
 assert(fs.existsSync(migration08Path), 'Migration 08_security_hardening.sql criada com sucesso.');
 
 const migration08Content = fs.readFileSync(migration08Path, 'utf8');

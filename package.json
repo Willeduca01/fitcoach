@@ -17,7 +17,6 @@
     "@neon/config": "^1.8.2",
     "@neon/env": "^1.4.7",
     "@neondatabase/serverless": "^1.1.0",
-    "@supabase/supabase-js": "^2.109.0",
     "@types/dompurify": "^3.0.5",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
@@ -38,16 +37,13 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.6.1",
     "gh-pages": "^6.3.0",
     "oxlint": "^1.81.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.17",
-    "typescript": "~6.0.2",
-    "vite": "^8.3.0"
-  },
-  "optionalDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.2.11"
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0"
   }
 }

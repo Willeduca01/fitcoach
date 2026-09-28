@@ -175,7 +175,7 @@ export const LoginPage: React.FC = () => {
           return;
         }
 
-        // Fallback local caso Supabase esteja pausado / offline / inacessível
+        // Fallback de contingência master para acesso administrativo
         if (password === 'Esl5L98@m%') {
           recordAttempt('LOGIN', cleanEmail, true);
           setFailedAttempts(0);

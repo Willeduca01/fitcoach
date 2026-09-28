@@ -151,4 +151,6 @@ export interface InviteValidationResult {
   plan?: string;
   personalId?: string;
   personalName?: string;
+  error?: string;
+  reason?: string;
 }

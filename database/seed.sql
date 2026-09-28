@@ -1,4 +1,4 @@
-﻿-- ============================================================================
+-- ============================================================================
 -- FITCOACH PRO — SEED SCRIPT (DADOS INICIAIS OPCIONAIS DE DEMONSTRACAO)
 -- ============================================================================
 
@@ -64,6 +64,6 @@ BEGIN
 
         RAISE NOTICE 'Dados de demonstracao inseridos com sucesso para o Personal %', demo_personal_id;
     ELSE
-        RAISE NOTICE 'Nenhum perfil com role = PERSONAL encontrado ainda. Crie seu primeiro usuario no Supabase Auth antes de rodar o seed.';
+        RAISE NOTICE 'Nenhum perfil com role = PERSONAL encontrado ainda. Crie seu primeiro usuario no Neon antes de rodar o seed.';
     END IF;
 END ;

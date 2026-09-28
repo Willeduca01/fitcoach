@@ -91,7 +91,7 @@ export const DIAGNOSTIC_KNOWLEDGE_BASE: Record<
   },
   AUTH_INVALID_CREDENTIALS: {
     cause:
-      'O e-mail ou a senha informados não coincidem com nenhum usuário registrado na tabela auth.users do Supabase.',
+      'O e-mail ou a senha informados não coincidem com nenhum usuário registrado no Neon Postgres.',
     action:
       'Verifique se a conta já foi confirmada ou se o usuário foi cadastrado via convite de professor ou aluno.',
   },
@@ -103,9 +103,9 @@ export const DIAGNOSTIC_KNOWLEDGE_BASE: Record<
   },
   NETWORK_OFFLINE: {
     cause:
-      'O navegador perdeu conexão com a internet ou os servidores do Supabase / Cloudflare estão temporariamente inacessíveis.',
+      'O navegador perdeu conexão com a internet ou os servidores do Neon / Cloudflare estão temporariamente inacessíveis.',
     action:
-      'Verifique a conexão de rede local e o status dos serviços do Supabase (status.supabase.com).',
+      'Verifique a conexão de rede local e o status dos serviços do Neon (neonstatus.com).',
   },
   DATABASE_RLS_VIOLATION: {
     cause:
@@ -167,11 +167,11 @@ function seedInitialLogs(): SystemLogEntry[] {
       timestamp: now - 18000,
       severity: 'INFO',
       category: 'DATABASE',
-      event: 'SUPABASE_CONNECTED',
-      message: 'Conexão estabelecida com sucesso com PostgreSQL e Supabase Auth.',
-      metadata: { endpoint: 'https://xmpbzpdggsonzftueynw.supabase.co' },
-      probableCause: 'Credenciais de API do Supabase verificadas e autenticadas.',
-      recommendedAction: 'Políticas RLS ativas em profiles, invites, students e workouts.',
+      event: 'NEON_CONNECTED',
+      message: 'Conexão estabelecida com sucesso com Neon Serverless Postgres.',
+      metadata: { endpoint: 'aws.neon.tech' },
+      probableCause: 'Pooler e strings de conexão do Neon verificadas e autenticadas.',
+      recommendedAction: 'Políticas e consultas ativas em profiles, invites, students e workouts.',
     },
     {
       id: 'log_seed_4',

@@ -32,7 +32,7 @@ DROP TRIGGER IF EXISTS set_invoices_updated_at ON public.invoices;
 CREATE TRIGGER set_invoices_updated_at BEFORE UPDATE ON public.invoices
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- 3. Trigger para criar perfil automaticamente no Supabase Auth
+-- 3. Trigger para criar perfil automaticamente no Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql

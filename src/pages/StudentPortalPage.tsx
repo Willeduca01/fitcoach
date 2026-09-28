@@ -9,7 +9,6 @@ import { WorkoutTrackerTab } from '../components/student/WorkoutTrackerTab';
 import { EvolutionTab } from '../components/student/EvolutionTab';
 import { PaymentTab } from '../components/student/PaymentTab';
 import { ContactTab } from '../components/student/ContactTab';
-import { supabase } from '../lib/supabase';
 
 export const StudentPortalPage: React.FC = () => {
   const { role, currentStudentId, user, logout, isPasswordRecovery } = useAuth();
@@ -41,10 +40,11 @@ export const StudentPortalPage: React.FC = () => {
       setIsLinking(true);
       (async () => {
         try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData?.session?.access_token;
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (token) headers['Authorization'] = `Bearer ${token}`;
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'x-fitcoach-user-id': user.id,
+            'Authorization': `Bearer ${user.id}`,
+          };
 
           let res = await fetch('/api/link-student', {
             method: 'POST',

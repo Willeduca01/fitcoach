@@ -11,8 +11,6 @@ function emailServerPlugin(): Plugin {
   const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
   const gmailUser = env.GMAIL_USER || process.env.GMAIL_USER;
   const gmailPass = env.GMAIL_APP_PASSWORD || process.env.GMAIL_APP_PASSWORD;
-  const supabaseUrl = env.VITE_SUPABASE_URL || 'https://xmpbzpdggsonzftueynw.supabase.co';
-  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 
   return {
@@ -59,33 +57,44 @@ function emailServerPlugin(): Plugin {
                 .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
                 .replace(/href\s*=\s*["']?\s*(?:javascript|data:text\/html):[^"'>\s]*/gi, 'href="#"');
 
-              // Se for redefinição de senha, gera o link seguro com token criptográfico do Supabase
-              if (body.type === 'PASSWORD_RESET' && serviceRoleKey) {
+              // Se for redefinição de senha, gera link com token seguro no Neon Postgres
+              if (body.type === 'PASSWORD_RESET') {
                 try {
-                  const { createClient } = await import('@supabase/supabase-js');
-                  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-                  const origin = req.headers.origin || 'http://localhost:5173';
-                  const basePath = '/fitcoach';
-                  const redirectTo = `${origin}${basePath}/?type=recovery`;
+                  if (databaseUrl) {
+                    const { neon } = await import('@neondatabase/serverless');
+                    const sql = neon(databaseUrl);
+                    const crypto = await import('crypto');
+                    const resetToken = crypto.randomBytes(24).toString('hex');
+                    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
-                  const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-                    type: 'recovery',
-                    email: to,
-                    options: { redirectTo },
-                  });
+                    await sql`
+                      CREATE TABLE IF NOT EXISTS public.password_resets (
+                        email TEXT PRIMARY KEY,
+                        token TEXT NOT NULL,
+                        expires_at TIMESTAMPTZ NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                      );
+                    `;
 
-                  if (!linkError && linkData?.properties?.action_link) {
-                    const actionLink = linkData.properties.action_link;
-                    console.log('[EmailServer] Link de recuperação oficial gerado pelo Supabase Admin:', actionLink);
+                    await sql`
+                      INSERT INTO public.password_resets (email, token, expires_at)
+                      VALUES (${cleanTo}, ${resetToken}, ${expiresAt.toISOString()})
+                      ON CONFLICT (email) DO UPDATE
+                      SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, created_at = NOW();
+                    `;
+
+                    const origin = req.headers.origin || 'http://localhost:5173';
+                    const basePath = '/fitcoach';
+                    const actionLink = `${origin}${basePath}/#/redefinir-senha?token=${resetToken}&email=${encodeURIComponent(cleanTo)}`;
+
+                    console.log('[EmailServer] Link de recuperação oficial gerado pelo Neon:', actionLink);
                     html = html.replaceAll('__FITCOACH_RESET_URL__', actionLink);
                     html = html.replace(/https?:\/\/[^"'\s]+#\/redefinir-senha[^"'\s]*/g, actionLink);
                     html = html.replace(/href=""/g, `href="${actionLink}"`);
                     html = html.replace(/href=''/g, `href='${actionLink}'`);
-                  } else {
-                    console.warn('[EmailServer] Erro ao gerar link pelo Supabase Admin:', linkError);
                   }
                 } catch (adminErr) {
-                  console.warn('[EmailServer] Falha ao processar Supabase Admin:', adminErr);
+                  console.warn('[EmailServer] Falha ao processar link de recuperação Neon:', adminErr);
                 }
               }
 
@@ -174,57 +183,47 @@ function emailServerPlugin(): Plugin {
                 return;
               }
 
-              if (!serviceRoleKey) {
+              if (!databaseUrl) {
                 res.statusCode = 500;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurada.' }));
+                res.end(JSON.stringify({ error: 'DATABASE_URL não configurada.' }));
                 return;
               }
 
-              const { createClient } = await import('@supabase/supabase-js');
-              const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+              const { neon } = await import('@neondatabase/serverless');
+              const sql = neon(databaseUrl);
               const cleanEmail = String(email).trim().toLowerCase();
 
-              const { data: existingStudent, error: findError } = await supabaseAdmin
-                .from('students')
-                .select('id, name, user_id, personal_id')
-                .eq('email', cleanEmail)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+              const existingStudents = await sql`
+                SELECT id, name, user_id, personal_id
+                FROM public.students
+                WHERE LOWER(email) = ${cleanEmail}
+                ORDER BY created_at DESC
+                LIMIT 1
+              `;
 
-              if (findError) {
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: findError.message }));
-                return;
-              }
-
-              if (!existingStudent) {
+              if (existingStudents.length === 0) {
                 res.statusCode = 404;
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({ error: 'Nenhuma ficha de aluno encontrada com este e-mail.' }));
                 return;
               }
 
-              const { error: updateError } = await supabaseAdmin
-                .from('students')
-                .update({ user_id: userId, updated_at: new Date().toISOString() })
-                .eq('id', existingStudent.id);
+              const existingStudent = existingStudents[0];
 
-              if (updateError) {
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: updateError.message }));
-                return;
-              }
+              await sql`
+                UPDATE public.students
+                SET user_id = ${userId}, updated_at = NOW()
+                WHERE id = ${existingStudent.id}
+              `;
 
-              await supabaseAdmin
-                .from('profiles')
-                .update({ role: 'STUDENT' })
-                .eq('id', userId);
+              await sql`
+                UPDATE public.profiles
+                SET role = 'STUDENT', updated_at = NOW()
+                WHERE id = ${userId}
+              `;
 
-              console.log(`[vite:link-student] Aluno ${existingStudent.name} vinculado com sucesso ao user_id ${userId}`);
+              console.log(`[vite:link-student] Aluno ${existingStudent.name} vinculado com sucesso via Neon ao user_id ${userId}`);
 
               res.statusCode = 200;
               res.setHeader('Content-Type', 'application/json');
@@ -604,6 +603,134 @@ function emailServerPlugin(): Plugin {
           return;
         }
 
+        // Middleware de Redefinição de Senha (Neon Postgres): POST /api/reset-password
+        if (req.method === 'POST' && (url === '/api/reset-password' || url === '/fitcoach/api/reset-password')) {
+          let bodyStr = '';
+          req.on('data', (chunk) => { bodyStr += chunk; });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              const { action, email, token, newPassword } = body;
+
+              if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+              const { neon } = await import('@neondatabase/serverless');
+              const sql = neon(databaseUrl);
+
+              if (action === 'REQUEST') {
+                const cleanEmail = String(email || '').trim().toLowerCase();
+                const users = await sql`
+                  SELECT id, name, email FROM public.profiles WHERE LOWER(email) = ${cleanEmail} LIMIT 1
+                `;
+                if (users.length === 0) {
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ success: true, message: 'Se o e-mail existir, as instruções foram enviadas.' }));
+                  return;
+                }
+                const crypto = await import('crypto');
+                const resetToken = crypto.randomBytes(24).toString('hex');
+                const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+                await sql`
+                  CREATE TABLE IF NOT EXISTS public.password_resets (
+                    email TEXT PRIMARY KEY,
+                    token TEXT NOT NULL,
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                  );
+                `;
+                await sql`
+                  INSERT INTO public.password_resets (email, token, expires_at)
+                  VALUES (${cleanEmail}, ${resetToken}, ${expiresAt.toISOString()})
+                  ON CONFLICT (email) DO UPDATE
+                  SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, created_at = NOW();
+                `;
+
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, resetToken }));
+                return;
+              }
+
+              if (action === 'VERIFY') {
+                const records = await sql`
+                  SELECT email FROM public.password_resets
+                  WHERE token = ${String(token).trim()} AND expires_at > NOW()
+                  LIMIT 1
+                `;
+                if (records.length === 0) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ valid: false, error: 'Token inválido ou expirado.' }));
+                  return;
+                }
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ valid: true, email: records[0].email }));
+                return;
+              }
+
+              if (action === 'RESET') {
+                if (!newPassword || newPassword.length < 6) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'A senha deve ter no mínimo 6 caracteres.' }));
+                  return;
+                }
+
+                let userEmail = email ? String(email).trim().toLowerCase() : null;
+                if (token) {
+                  const records = await sql`
+                    SELECT email FROM public.password_resets
+                    WHERE token = ${String(token).trim()} AND expires_at > NOW()
+                    LIMIT 1
+                  `;
+                  if (records.length === 0) {
+                    res.statusCode = 400;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Link de redefinição expirado ou inválido.' }));
+                    return;
+                  }
+                  userEmail = records[0].email;
+                }
+
+                if (!userEmail) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'E-mail ou token de autorização obrigatório.' }));
+                  return;
+                }
+
+                await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto;`;
+                await sql`
+                  UPDATE public.profiles
+                  SET password_hash = crypt(${String(newPassword)}, gen_salt('bf')),
+                      updated_at = NOW()
+                  WHERE LOWER(email) = ${userEmail}
+                `;
+                try {
+                  await sql`DELETE FROM public.password_resets WHERE email = ${userEmail};`;
+                } catch {}
+
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, message: 'Senha atualizada com sucesso!' }));
+                return;
+              }
+
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Ação inválida.' }));
+            } catch (err: any) {
+              console.error('[vite:reset-password] Erro:', err);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message || 'Erro ao processar redefinição de senha.' }));
+            }
+          });
+          return;
+        }
+
         // Middleware de Dados do Usuário / CRM (Neon Postgres): /api/app-data
         if (url === '/api/app-data' || url === '/fitcoach/api/app-data') {
           if (req.method === 'GET') {
@@ -934,7 +1061,7 @@ function emailServerPlugin(): Plugin {
 }
 
 const securityHeaders = {
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://*.amazonaws.com https:; media-src 'self' data: blob: https://*.supabase.co https://*.amazonaws.com https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://api64.ipify.org https://api.ipify.org https://*.amazonaws.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://*.amazonaws.com https:; media-src 'self' data: blob: https://*.amazonaws.com https:; connect-src 'self' https://*.neon.tech https://api.resend.com https://api64.ipify.org https://api.ipify.org https://*.amazonaws.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';",
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '0',

@@ -48,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const effectiveId = profile.id;
       const isStudent = profile.role === 'STUDENT';
 
-      // 2. Perfil profissional (se PERSONAL) ou do treinador (se STUDENT)
+      // 2. Perfil profissional
       let personalData: any = null;
       if (!isStudent) {
         const pRows = await sql`
@@ -154,15 +154,213 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 2. POST: Atualiza perfil profissional em personal_profiles e profiles
+  // 2. POST: Ações de mutação e atualização no Neon Postgres
   if (req.method === 'POST') {
-    const { userId, name, phone, avatarUrl, title, cref, bio, pixKey, pixType } = req.body || {};
+    const { action, userId } = req.body || {};
 
-    if (!userId) {
+    if (!userId && !action) {
       return res.status(400).json({ error: 'userId obrigatório.' });
     }
 
     try {
+      // --- Adicionar Aluno ---
+      if (action === 'ADD_STUDENT') {
+        const { personalId, student } = req.body;
+        const rows = await sql`
+          INSERT INTO public.students (
+            personal_id, name, email, phone, avatar_url, status, plan,
+            monthly_fee, due_day, payment_status, start_date, primary_goal, notes
+          )
+          VALUES (
+            ${personalId}::uuid, ${student.name}, ${student.email || null}, ${student.phone || null},
+            ${student.avatarUrl || null}, ${student.status || 'ATIVO'}, ${student.plan || 'MENSAL'},
+            ${student.monthlyFee || 0}, ${student.dueDay || 10}, ${student.paymentStatus || 'EM_DIA'},
+            ${student.startDate || new Date().toISOString().split('T')[0]},
+            ${student.primaryGoal || 'Condicionamento Físico'}, ${student.notes || null}
+          )
+          RETURNING *;
+        `;
+        return res.status(201).json({ success: true, student: rows[0] });
+      }
+
+      // --- Atualizar Aluno ---
+      if (action === 'UPDATE_STUDENT') {
+        const { studentId, student } = req.body;
+        await sql`
+          UPDATE public.students
+          SET name = COALESCE(${student.name}, name),
+              email = ${student.email || null},
+              phone = ${student.phone || null},
+              avatar_url = ${student.avatarUrl || null},
+              status = COALESCE(${student.status}, status),
+              plan = COALESCE(${student.plan}, plan),
+              monthly_fee = COALESCE(${student.monthlyFee}, monthly_fee),
+              due_day = COALESCE(${student.dueDay}, due_day),
+              payment_status = COALESCE(${student.paymentStatus}, payment_status),
+              primary_goal = COALESCE(${student.primaryGoal}, primary_goal),
+              notes = ${student.notes || null},
+              updated_at = NOW()
+          WHERE id = ${studentId}::uuid;
+        `;
+        return res.status(200).json({ success: true });
+      }
+
+      // --- Excluir Aluno ---
+      if (action === 'DELETE_STUDENT') {
+        const { studentId } = req.body;
+        await sql`DELETE FROM public.workouts WHERE student_id = ${studentId}::uuid;`;
+        await sql`DELETE FROM public.invoices WHERE student_id = ${studentId}::uuid;`;
+        await sql`DELETE FROM public.sessions WHERE student_id = ${studentId}::uuid;`;
+        await sql`DELETE FROM public.physical_assessments WHERE student_id = ${studentId}::uuid;`;
+        await sql`DELETE FROM public.messages WHERE student_id = ${studentId}::uuid;`;
+        await sql`DELETE FROM public.students WHERE id = ${studentId}::uuid;`;
+        return res.status(200).json({ success: true });
+      }
+
+      // --- Adicionar / Atualizar Treino ---
+      if (action === 'ADD_WORKOUT') {
+        const { studentId, personalId, name, focus, exercises } = req.body;
+        const rows = await sql`
+          INSERT INTO public.workouts (student_id, personal_id, name, focus, exercises)
+          VALUES (${studentId}::uuid, ${personalId}::uuid, ${name}, ${focus}, ${JSON.stringify(exercises || [])})
+          RETURNING *;
+        `;
+        return res.status(201).json({ success: true, workout: rows[0] });
+      }
+
+      if (action === 'UPDATE_WORKOUT') {
+        const { routineId, name, focus, exercises } = req.body;
+        await sql`
+          UPDATE public.workouts
+          SET name = COALESCE(${name}, name),
+              focus = COALESCE(${focus}, focus),
+              exercises = ${JSON.stringify(exercises || [])},
+              updated_at = NOW()
+          WHERE id = ${routineId}::uuid;
+        `;
+        return res.status(200).json({ success: true });
+      }
+
+      if (action === 'DELETE_WORKOUT') {
+        const { routineId } = req.body;
+        await sql`DELETE FROM public.workouts WHERE id = ${routineId}::uuid;`;
+        return res.status(200).json({ success: true });
+      }
+
+      // --- Avaliação Física ---
+      if (action === 'ADD_ASSESSMENT') {
+        const { studentId, personalId, assessment } = req.body;
+        const rows = await sql`
+          INSERT INTO public.physical_assessments (
+            student_id, personal_id, date, weight_kg, height_cm,
+            body_fat_percentage, chest_cm, arms_cm, waist_cm, hips_cm, thighs_cm, notes
+          )
+          VALUES (
+            ${studentId}::uuid, ${personalId}::uuid,
+            ${assessment.date || new Date().toISOString().split('T')[0]},
+            ${assessment.weightKg || assessment.weight || null},
+            ${assessment.heightCm || null},
+            ${assessment.bodyFatPercentage || assessment.bodyFat || null},
+            ${assessment.chestCm || null},
+            ${assessment.armsCm || null},
+            ${assessment.waistCm || null},
+            ${assessment.hipsCm || null},
+            ${assessment.thighsCm || null},
+            ${assessment.notes || null}
+          )
+          RETURNING *;
+        `;
+        return res.status(201).json({ success: true, assessment: rows[0] });
+      }
+
+      // --- Sessões / Aulas ---
+      if (action === 'ADD_SESSION') {
+        const { studentId, personalId, session } = req.body;
+        const rows = await sql`
+          INSERT INTO public.sessions (
+            student_id, personal_id, date, time, duration_minutes,
+            status, location, workout_routine_id, routine_name, notes
+          )
+          VALUES (
+            ${studentId}::uuid, ${personalId}::uuid, ${session.date}, ${session.time},
+            ${session.durationMinutes || 60}, ${session.status || 'AGENDADA'},
+            ${session.location || null}, ${session.workoutRoutineId || null},
+            ${session.routineName || null}, ${session.notes || null}
+          )
+          RETURNING *;
+        `;
+        return res.status(201).json({ success: true, session: rows[0] });
+      }
+
+      if (action === 'UPDATE_SESSION_STATUS') {
+        const { sessionId, status } = req.body;
+        await sql`
+          UPDATE public.sessions
+          SET status = ${status}
+          WHERE id = ${sessionId}::uuid;
+        `;
+        return res.status(200).json({ success: true });
+      }
+
+      // --- Faturas ---
+      if (action === 'ADD_INVOICE') {
+        const { studentId, personalId, invoice } = req.body;
+        const rows = await sql`
+          INSERT INTO public.invoices (student_id, personal_id, amount, due_date, status, paid_date, payment_method)
+          VALUES (
+            ${studentId}::uuid, ${personalId}::uuid, ${invoice.amount}, ${invoice.dueDate},
+            ${invoice.status || 'PENDENTE'}, ${invoice.paidDate || null}, ${invoice.paymentMethod || 'PIX'}
+          )
+          RETURNING *;
+        `;
+        return res.status(201).json({ success: true, invoice: rows[0] });
+      }
+
+      if (action === 'UPDATE_INVOICE_STATUS') {
+        const { invoiceId, status, paidDate, paymentMethod } = req.body;
+        await sql`
+          UPDATE public.invoices
+          SET status = ${status},
+              paid_date = ${status === 'PAGO' ? (paidDate || new Date().toISOString().split('T')[0]) : null},
+              payment_method = COALESCE(${paymentMethod || null}, payment_method),
+              updated_at = NOW()
+          WHERE id = ${invoiceId}::uuid;
+        `;
+        return res.status(200).json({ success: true });
+      }
+
+      // --- Mensagens ---
+      if (action === 'SEND_MESSAGE') {
+        const { studentId, personalId, senderRole, senderId, senderName, content, category } = req.body;
+        const rows = await sql`
+          INSERT INTO public.messages (
+            student_id, personal_id, sender_role, sender_id, sender_name, content, category, read
+          )
+          VALUES (
+            ${studentId}::uuid, ${personalId}::uuid, ${senderRole || 'PERSONAL'},
+            ${senderId}::uuid, ${senderName || 'FitCoach'}, ${content || ''},
+            ${category || 'GERAL'}, false
+          )
+          RETURNING *;
+        `;
+        return res.status(201).json({ success: true, message: rows[0] });
+      }
+
+      if (action === 'MARK_MESSAGES_READ') {
+        const { studentId, personalId, senderRole } = req.body;
+        await sql`
+          UPDATE public.messages
+          SET read = true
+          WHERE student_id = ${studentId}::uuid
+            AND personal_id = ${personalId}::uuid
+            AND sender_role = ${senderRole};
+        `;
+        return res.status(200).json({ success: true });
+      }
+
+      // --- Atualização de Perfil (Personal) Padrão ---
+      const { name, phone, avatarUrl, title, cref, bio, pixKey, pixType } = req.body;
+
       if (name || phone || avatarUrl) {
         await sql`
           UPDATE public.profiles
@@ -196,8 +394,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({ success: true });
     } catch (err: any) {
-      console.error('[API app-data POST] Erro ao atualizar perfil no Neon:', err);
-      return res.status(500).json({ error: 'Erro ao atualizar perfil no banco.' });
+      console.error('[API app-data POST] Erro ao sincronizar dados no Neon:', err);
+      return res.status(500).json({ error: err.message || 'Erro ao sincronizar com Neon.' });
     }
   }
 

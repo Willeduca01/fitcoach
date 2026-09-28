@@ -6,8 +6,6 @@ import {
 } from '../lib/emailTemplates';
 import { checkRateLimit, recordAttempt, formatSecondsToTime } from '../lib/rateLimiter';
 import { isValidEmail, sanitizeHeader } from '../lib/security';
-import { supabase } from '../lib/supabase';
-
 import { systemLogger } from '../lib/systemLogger';
 
 export interface SendInviteResult {
@@ -50,19 +48,23 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
   const { subject, html } = generateInviteEmailHtml(data);
 
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
     const savedAuth = typeof localStorage !== 'undefined' ? localStorage.getItem('fitcoach_auth_session') : null;
     let savedRole: string | null = null;
+    let savedUserId: string | null = null;
     try {
-      savedRole = savedAuth ? JSON.parse(savedAuth).role : null;
+      if (savedAuth) {
+        const parsed = JSON.parse(savedAuth);
+        savedRole = parsed.role;
+        savedUserId = parsed.user?.id || null;
+      }
     } catch {}
 
     const authHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (token) {
-      authHeaders['Authorization'] = `Bearer ${token}`;
+    if (savedUserId) {
+      authHeaders['x-fitcoach-user-id'] = savedUserId;
+      authHeaders['Authorization'] = `Bearer ${savedUserId}`;
     }
     if (savedRole) {
       authHeaders['x-fitcoach-role'] = savedRole;

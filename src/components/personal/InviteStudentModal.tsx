@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useAuth } from '../../context/AuthContext';
 import { useAppData } from '../../context/AppDataContext';
-import { createStudentInvite } from '../../lib/supabase';
+import { createStudentInvite } from '../../lib/neon';
 import { sendInviteEmail } from '../../services/emailService';
 import {
   UserPlus,

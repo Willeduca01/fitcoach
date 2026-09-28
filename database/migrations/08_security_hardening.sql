@@ -1,6 +1,6 @@
 -- ============================================================================
 -- FITCOACH PRO — PARTE 8: BLINDAGEM DE SEGURANÇA (SECURITY HARDENING)
--- Correção contra Search Path Hijacking (CWE-426 / Supabase Linter) e SQLi
+-- Correção contra Search Path Hijacking (CWE-426 / PostgreSQL Security Linter) e SQLi
 -- Garante SET search_path = public, pg_temp em todas as funções SECURITY DEFINER
 -- ============================================================================
 

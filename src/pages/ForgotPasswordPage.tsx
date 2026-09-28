@@ -113,7 +113,7 @@ export const ForgotPasswordPage: React.FC = () => {
     }
 
     try {
-      // 1. Envia o e-mail de recuperação formatado pelo nosso serviço de e-mail (Gmail SMTP com link assinado do Supabase)
+      // 1. Envia o e-mail de recuperação formatado pelo serviço de e-mail (Gmail SMTP com link seguro do Neon)
       const origin = window.location.origin;
       const basePath = window.location.pathname.startsWith('/fitcoach') ? '/fitcoach' : '';
       const fallbackResetUrl = `${origin}${basePath}/#/redefinir-senha?email=${encodeURIComponent(cleanEmail)}`;
@@ -124,12 +124,12 @@ export const ForgotPasswordPage: React.FC = () => {
       });
 
       if (!res.success) {
-        // Fallback: Dispara diretamente pelo Supabase Auth caso o endpoint não responda
-        const supabaseRes = await sendPasswordResetEmail(cleanEmail);
-        if (!supabaseRes.success) {
+        // Fallback: Dispara solicitação pelo endpoint do Neon
+        const resetRes = await sendPasswordResetEmail(cleanEmail);
+        if (!resetRes.success) {
           recordAttempt('EMAIL_SEND', cleanEmail, false);
           setCaptchaToken('');
-          setErrorMessage(supabaseRes.error || res.error || 'Não foi possível processar a solicitação de redefinição.');
+          setErrorMessage(resetRes.error || res.error || 'Não foi possível processar a solicitação de redefinição.');
           setIsLoading(false);
           return;
         }

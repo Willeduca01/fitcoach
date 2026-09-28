@@ -22,7 +22,6 @@ import {
   MONTHLY_FINANCIAL_HISTORY
 } from '../data/mockData';
 import { useAuth } from './AuthContext';
-import { supabase } from '../lib/supabase';
 
 interface AppDataContextType {
   personal: PersonalProfile;
@@ -54,6 +53,28 @@ interface AppDataContextType {
 }
 
 const STORAGE_KEY = 'fitcoach_app_data_v3';
+
+async function syncNeonData(payload: any) {
+  try {
+    let res = await fetch('/api/app-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => null);
+
+    if (!res || res.status === 404) {
+      res = await fetch('/fitcoach/api/app-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => null);
+    }
+    return res ? await res.json().catch(() => null) : null;
+  } catch (err) {
+    console.warn('[AppDataContext] Falha ao sincronizar com Neon:', err);
+    return null;
+  }
+}
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
 
@@ -252,266 +273,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       } catch (neonErr) {
         console.warn('[AppDataContext] Erro ao carregar do Neon via /api/app-data:', neonErr);
+      } finally {
+        setIsLoadingData(false);
       }
-
-      // 2. Fallback legado Supabase
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      const isStudent = profile?.role === 'STUDENT';
-
-      let studentsData: any[] = [];
-      let studentPersonalId: string | null = null;
-
-      if (isStudent) {
-        // Aluno autenticado: busca sua própria ficha por user_id
-        let { data: myStudent } = await supabase
-          .from('students')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        // Se ainda não estiver vinculado na coluna user_id, vincula via API
-        if (!myStudent && user?.email) {
-          try {
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData?.session?.access_token;
-            const linkHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) linkHeaders['Authorization'] = `Bearer ${token}`;
-
-            let linkRes = await fetch('/api/link-student', {
-              method: 'POST',
-              headers: linkHeaders,
-              body: JSON.stringify({ userId, email: user.email }),
-            }).catch(() => null);
-
-            if (!linkRes || linkRes.status === 404) {
-              linkRes = await fetch('/fitcoach/api/link-student', {
-                method: 'POST',
-                headers: linkHeaders,
-                body: JSON.stringify({ userId, email: user.email }),
-              }).catch(() => null);
-            }
-
-            if (linkRes && linkRes.ok) {
-              const { data: refetched } = await supabase
-                .from('students')
-                .select('*')
-                .eq('user_id', userId)
-                .maybeSingle();
-              myStudent = refetched;
-            }
-          } catch (e) {
-            console.warn('[AppDataContext] Falha ao vincular aluno automaticamente:', e);
-          }
-        }
-
-        if (myStudent) {
-          studentsData = [myStudent];
-          studentPersonalId = myStudent.personal_id;
-
-          // Busca dados do Personal Trainer do aluno para preencher o perfil do treinador
-          if (studentPersonalId) {
-            const { data: trainerProfile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', studentPersonalId)
-              .maybeSingle();
-
-            const { data: trainerPersonal } = await supabase
-              .from('personal_profiles')
-              .select('*')
-              .eq('id', studentPersonalId)
-              .maybeSingle();
-
-            if (trainerProfile) {
-              setPersonal({
-                id: studentPersonalId,
-                name: trainerProfile.name || 'Personal Trainer',
-                title: trainerPersonal?.title || 'Personal Trainer & Consultor Fitness',
-                email: trainerProfile.email || '',
-                phone: trainerProfile.phone || '',
-                avatarUrl: trainerProfile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-                pixKey: trainerPersonal?.pix_key || '',
-                pixType: (trainerPersonal?.pix_type as any) || 'EMAIL',
-                cref: trainerPersonal?.cref || 'Não informado',
-                bio: trainerPersonal?.bio || '',
-              });
-            }
-          }
-        }
-      } else {
-        // Usuário é Personal Trainer ou Master: busca perfil profissional
-        const { data: personalProfile } = await supabase
-          .from('personal_profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (profile) {
-          setPersonal({
-            id: userId,
-            name: profile.name || user?.user_metadata?.name || 'Personal Trainer',
-            title: personalProfile?.title || 'Personal Trainer & Consultor Fitness',
-            email: profile.email || user?.email || '',
-            phone: profile.phone || '',
-            avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-            pixKey: personalProfile?.pix_key || '',
-            pixType: (personalProfile?.pix_type as any) || 'EMAIL',
-            cref: personalProfile?.cref || 'Não informado',
-            bio: personalProfile?.bio || '',
-          });
-        }
-
-        // Busca todos os alunos deste treinador
-        const { data: trainerStudents } = await supabase
-          .from('students')
-          .select('*')
-          .eq('personal_id', userId)
-          .order('created_at', { ascending: false });
-
-        studentsData = trainerStudents || [];
-      }
-
-      const activeStudentId = isStudent ? studentsData[0]?.id : null;
-
-      // Treinos e Avaliações
-      const workoutsQuery = isStudent && activeStudentId
-        ? supabase.from('workouts').select('*').eq('student_id', activeStudentId)
-        : supabase.from('workouts').select('*').eq('personal_id', userId);
-      const { data: workoutsData } = await workoutsQuery;
-
-      const assessmentsQuery = isStudent && activeStudentId
-        ? supabase.from('physical_assessments').select('*').eq('student_id', activeStudentId)
-        : supabase.from('physical_assessments').select('*').eq('personal_id', userId);
-      const { data: assessmentsData } = await assessmentsQuery;
-
-      const mappedStudents: Student[] = studentsData.map((s) => ({
-        id: s.id,
-        userId: s.user_id || undefined,
-        name: s.name,
-        email: s.email || '',
-        phone: s.phone || '',
-        avatarUrl: s.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-        status: s.status,
-        plan: s.plan,
-        monthlyFee: Number(s.monthly_fee) || 0,
-        dueDay: s.due_day || 10,
-        paymentStatus: s.payment_status || 'EM_DIA',
-        startDate: s.start_date || new Date().toISOString().split('T')[0],
-        primaryGoal: s.primary_goal || 'Condicionamento Físico',
-        streakDays: s.streak_days || 0,
-        workouts: (workoutsData || [])
-          .filter((w) => w.student_id === s.id)
-          .map((w) => ({
-            id: w.id,
-            name: w.name,
-            focus: w.focus,
-            exercises: Array.isArray(w.exercises) ? w.exercises : [],
-          })),
-        measurements: (assessmentsData || [])
-          .filter((a) => a.student_id === s.id)
-          .map((a) => ({
-            id: a.id,
-            date: a.date,
-            weightKg: Number(a.weight_kg),
-            heightCm: Number(a.height_cm),
-            bodyFatPercentage: a.body_fat_percentage ? Number(a.body_fat_percentage) : undefined,
-            chestCm: a.chest_cm ? Number(a.chest_cm) : undefined,
-            armsCm: a.arms_cm ? Number(a.arms_cm) : undefined,
-            waistCm: a.waist_cm ? Number(a.waist_cm) : undefined,
-            hipsCm: a.hips_cm ? Number(a.hips_cm) : undefined,
-            thighsCm: a.thighs_cm ? Number(a.thighs_cm) : undefined,
-          })),
-        nextAssessmentDate: s.next_assessment_date,
-        notes: s.notes,
-      }));
-
-      setStudents(mappedStudents);
-
-      // 3. Faturas
-      const invoicesQuery = isStudent && activeStudentId
-        ? supabase.from('invoices').select('*').eq('student_id', activeStudentId).order('due_date', { ascending: false })
-        : supabase.from('invoices').select('*').eq('personal_id', userId).order('due_date', { ascending: false });
-      const { data: invoicesData } = await invoicesQuery;
-
-      const mappedInvoices: Invoice[] = (invoicesData || []).map((inv) => {
-        const student = (studentsData || []).find((s) => s.id === inv.student_id);
-        return {
-          id: inv.id,
-          studentId: inv.student_id,
-          studentName: student?.name || 'Aluno',
-          amount: Number(inv.amount) || 0,
-          dueDate: inv.due_date,
-          paidDate: inv.paid_date,
-          status: inv.status,
-          paymentMethod: inv.payment_method || 'PIX',
-        };
-      });
-      setInvoices(mappedInvoices);
-
-      // 4. Sessões
-      const sessionsQuery = isStudent && activeStudentId
-        ? supabase.from('sessions').select('*').eq('student_id', activeStudentId).order('date', { ascending: true })
-        : supabase.from('sessions').select('*').eq('personal_id', userId).order('date', { ascending: true });
-      const { data: sessionsData } = await sessionsQuery;
-
-      const mappedSessions: SessionSchedule[] = (sessionsData || []).map((sess) => {
-        const student = (studentsData || []).find((s) => s.id === sess.student_id);
-        return {
-          id: sess.id,
-          studentId: sess.student_id,
-          studentName: student?.name || 'Aluno',
-          date: sess.date,
-          time: sess.time,
-          durationMinutes: sess.duration_minutes || 60,
-          location: sess.location || 'SmartFit',
-          status: sess.status,
-          workoutRoutineId: sess.workout_routine_id,
-          routineName: sess.routine_name,
-        };
-      });
-      setSessions(mappedSessions);
-
-      // 5. Mensagens
-      const messagesQuery = isStudent && activeStudentId
-        ? supabase.from('messages').select('*').eq('student_id', activeStudentId).order('created_at', { ascending: true })
-        : supabase.from('messages').select('*').eq('personal_id', userId).order('created_at', { ascending: true });
-      const { data: messagesData } = await messagesQuery;
-
-      const mappedMessages: ChatMessage[] = (messagesData || []).map((m) => {
-        let parsedContent = m.content;
-        let parsedMedia: ChatMedia | undefined = undefined;
-
-        if (typeof m.content === 'string' && m.content.startsWith('__FC_MEDIA__')) {
-          try {
-            const parsed = JSON.parse(m.content.substring(12));
-            parsedContent = parsed.text || '';
-            parsedMedia = parsed.media;
-          } catch (e) {
-            parsedContent = m.content;
-          }
-        }
-
-        return {
-          id: m.id,
-          senderRole: m.sender_role,
-          senderId: m.sender_id,
-          senderName: m.sender_name,
-          studentId: m.student_id,
-          content: parsedContent,
-          media: parsedMedia,
-          timestamp: new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          read: m.read,
-          category: m.category,
-        };
-      });
-      setMessages(mappedMessages);
+      return;
     } catch (err) {
-      console.error('[AppDataContext] Erro ao carregar dados do Supabase:', err);
+      console.error('[AppDataContext] Erro ao carregar dados:', err);
     } finally {
       setIsLoadingData(false);
     }
@@ -588,36 +355,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (!isDemoMode && user) {
       try {
-        const { data, error } = await supabase.from('students').insert({
-          personal_id: user.id,
-          name: studentData.name,
-          email: studentData.email || null,
-          phone: studentData.phone || null,
-          avatar_url: studentData.avatarUrl || null,
-          status: studentData.status || 'ATIVO',
-          plan: studentData.plan || 'MENSAL',
-          monthly_fee: studentData.monthlyFee || 0,
-          due_day: studentData.dueDay || 10,
-          payment_status: studentData.paymentStatus || 'EM_DIA',
-          start_date: studentData.startDate || new Date().toISOString().split('T')[0],
-          primary_goal: studentData.primaryGoal || 'Condicionamento Físico',
-          notes: studentData.notes || null,
-        }).select().single();
+        const result = await syncNeonData({
+          action: 'ADD_STUDENT',
+          personalId: user.id,
+          student: studentData,
+        });
 
-        if (error) {
-          console.error('[AppDataContext] Erro ao cadastrar aluno no Supabase:', error);
-        } else if (data) {
-          newId = data.id;
-          await supabase.from('workouts').insert({
-            student_id: newId,
-            personal_id: user.id,
+        if (result?.student?.id) {
+          newId = result.student.id;
+          await syncNeonData({
+            action: 'ADD_WORKOUT',
+            studentId: newId,
+            personalId: user.id,
             name: initialWorkouts[0].name,
             focus: initialWorkouts[0].focus,
             exercises: initialWorkouts[0].exercises,
           });
         }
       } catch (err) {
-        console.error('[AppDataContext] Falha ao persistir aluno:', err);
+        console.error('[AppDataContext] Falha ao persistir aluno no Neon:', err);
       }
     }
 
@@ -638,18 +394,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (!isDemoMode && user) {
       try {
-        const { data: invData } = await supabase.from('invoices').insert({
-          student_id: newId,
-          personal_id: user.id,
-          amount: studentData.monthlyFee,
-          due_date: dueDateStr,
-          status: studentData.paymentStatus === 'EM_DIA' ? 'PAGO' : 'PENDENTE',
-          paid_date: studentData.paymentStatus === 'EM_DIA' ? new Date().toISOString().split('T')[0] : null,
-          payment_method: 'PIX',
-        }).select().single();
-        if (invData) invId = invData.id;
+        const invRes = await syncNeonData({
+          action: 'ADD_INVOICE',
+          studentId: newId,
+          personalId: user.id,
+          invoice: {
+            amount: studentData.monthlyFee,
+            dueDate: dueDateStr,
+            status: studentData.paymentStatus === 'EM_DIA' ? 'PAGO' : 'PENDENTE',
+            paidDate: studentData.paymentStatus === 'EM_DIA' ? new Date().toISOString().split('T')[0] : null,
+            paymentMethod: 'PIX',
+          },
+        });
+        if (invRes?.invoice?.id) invId = invRes.invoice.id;
       } catch (err) {
-        console.warn('Erro ao criar fatura:', err);
+        console.warn('Erro ao criar fatura no Neon:', err);
       }
     }
 
@@ -682,34 +441,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateStudent = async (updatedStudent: Student) => {
     if (!isDemoMode && user) {
-      try {
-        await supabase.from('students').update({
-          name: updatedStudent.name,
-          email: updatedStudent.email,
-          phone: updatedStudent.phone,
-          avatar_url: updatedStudent.avatarUrl,
-          status: updatedStudent.status,
-          plan: updatedStudent.plan,
-          monthly_fee: updatedStudent.monthlyFee,
-          due_day: updatedStudent.dueDay,
-          payment_status: updatedStudent.paymentStatus,
-          primary_goal: updatedStudent.primaryGoal,
-          notes: updatedStudent.notes,
-        }).eq('id', updatedStudent.id);
-      } catch (err) {
-        console.error('Erro ao atualizar aluno:', err);
-      }
+      await syncNeonData({
+        action: 'UPDATE_STUDENT',
+        studentId: updatedStudent.id,
+        student: updatedStudent,
+      });
     }
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
   };
 
   const deleteStudent = async (studentId: string) => {
     if (!isDemoMode && user) {
-      try {
-        await supabase.from('students').delete().eq('id', studentId);
-      } catch (err) {
-        console.error('Erro ao excluir aluno:', err);
-      }
+      await syncNeonData({
+        action: 'DELETE_STUDENT',
+        studentId,
+      });
     }
     setStudents(prev => prev.filter(s => s.id !== studentId));
     setSessions(prev => prev.filter(s => s.studentId !== studentId));
@@ -720,18 +466,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addWorkoutRoutine = async (studentId: string, routineData: Omit<WorkoutRoutine, 'id'>) => {
     let newId = `w-${Date.now()}`;
     if (!isDemoMode && user) {
-      try {
-        const { data } = await supabase.from('workouts').insert({
-          student_id: studentId,
-          personal_id: user.id,
-          name: routineData.name,
-          focus: routineData.focus,
-          exercises: routineData.exercises,
-        }).select().single();
-        if (data) newId = data.id;
-      } catch (err) {
-        console.error('Erro ao adicionar treino:', err);
-      }
+      const res = await syncNeonData({
+        action: 'ADD_WORKOUT',
+        studentId,
+        personalId: user.id,
+        name: routineData.name,
+        focus: routineData.focus,
+        exercises: routineData.exercises,
+      });
+      if (res?.workout?.id) newId = res.workout.id;
     }
 
     const newRoutine: WorkoutRoutine = {
@@ -750,15 +493,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateWorkoutRoutine = async (studentId: string, routine: WorkoutRoutine) => {
     if (!isDemoMode && user) {
-      try {
-        await supabase.from('workouts').update({
-          name: routine.name,
-          focus: routine.focus,
-          exercises: routine.exercises,
-        }).eq('id', routine.id);
-      } catch (err) {
-        console.error('Erro ao atualizar treino:', err);
-      }
+      await syncNeonData({
+        action: 'UPDATE_WORKOUT',
+        routineId: routine.id,
+        name: routine.name,
+        focus: routine.focus,
+        exercises: routine.exercises,
+      });
     }
 
     setStudents(prev => prev.map(student => {
@@ -772,11 +513,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteWorkoutRoutine = async (studentId: string, routineId: string) => {
     if (!isDemoMode && user) {
-      try {
-        await supabase.from('workouts').delete().eq('id', routineId);
-      } catch (err) {
-        console.error('Erro ao excluir treino:', err);
-      }
+      await syncNeonData({
+        action: 'DELETE_WORKOUT',
+        routineId,
+      });
     }
 
     setStudents(prev => prev.map(student => {
@@ -800,7 +540,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
             return { ...ex, completed: !ex.completed };
           });
           if (!isDemoMode && user) {
-            supabase.from('workouts').update({ exercises: updatedExercises }).eq('id', routineId).then();
+            syncNeonData({
+              action: 'UPDATE_WORKOUT',
+              routineId,
+              exercises: updatedExercises,
+            }).catch(() => null);
           }
           return {
             ...w,
@@ -814,24 +558,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addMeasurement = async (studentId: string, measurementData: Omit<MeasurementRecord, 'id'>) => {
     let newId = `m-${Date.now()}`;
     if (!isDemoMode && user) {
-      try {
-        const { data } = await supabase.from('physical_assessments').insert({
-          student_id: studentId,
-          personal_id: user.id,
-          date: measurementData.date,
-          weight_kg: measurementData.weightKg,
-          height_cm: measurementData.heightCm,
-          body_fat_percentage: measurementData.bodyFatPercentage || null,
-          chest_cm: measurementData.chestCm || null,
-          arms_cm: measurementData.armsCm || null,
-          waist_cm: measurementData.waistCm || null,
-          hips_cm: measurementData.hipsCm || null,
-          thighs_cm: measurementData.thighsCm || null,
-        }).select().single();
-        if (data) newId = data.id;
-      } catch (err) {
-        console.error('Erro ao salvar avaliação:', err);
-      }
+      const res = await syncNeonData({
+        action: 'ADD_ASSESSMENT',
+        studentId,
+        personalId: user.id,
+        assessment: measurementData,
+      });
+      if (res?.assessment?.id) newId = res.assessment.id;
     }
 
     const newMeasurement: MeasurementRecord = {
@@ -851,22 +584,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addSession = async (sessionData: Omit<SessionSchedule, 'id'>) => {
     let newId = `sess-${Date.now()}`;
     if (!isDemoMode && user) {
-      try {
-        const { data } = await supabase.from('sessions').insert({
-          personal_id: user.id,
-          student_id: sessionData.studentId,
-          date: sessionData.date,
-          time: sessionData.time,
-          duration_minutes: sessionData.durationMinutes,
-          location: sessionData.location,
-          status: sessionData.status,
-          workout_routine_id: sessionData.workoutRoutineId || null,
-          routine_name: sessionData.routineName || null,
-        }).select().single();
-        if (data) newId = data.id;
-      } catch (err) {
-        console.error('Erro ao adicionar sessão:', err);
-      }
+      const res = await syncNeonData({
+        action: 'ADD_SESSION',
+        studentId: sessionData.studentId,
+        personalId: user.id,
+        session: sessionData,
+      });
+      if (res?.session?.id) newId = res.session.id;
     }
 
     const newSession: SessionSchedule = {
@@ -878,11 +602,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateSessionStatus = async (sessionId: string, status: SessionStatus) => {
     if (!isDemoMode && user) {
-      try {
-        await supabase.from('sessions').update({ status }).eq('id', sessionId);
-      } catch (err) {
-        console.error('Erro ao atualizar sessão:', err);
-      }
+      await syncNeonData({
+        action: 'UPDATE_SESSION_STATUS',
+        sessionId,
+        status,
+      });
     }
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status } : s));
   };
@@ -891,15 +615,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let studentIdToUpdate: string | undefined;
 
     if (!isDemoMode && user) {
-      try {
-        await supabase.from('invoices').update({
-          status: 'PAGO',
-          paid_date: new Date().toISOString().split('T')[0],
-          payment_method: 'PIX',
-        }).eq('id', invoiceId);
-      } catch (err) {
-        console.error('Erro ao atualizar fatura no banco:', err);
-      }
+      await syncNeonData({
+        action: 'UPDATE_INVOICE_STATUS',
+        invoiceId,
+        status: 'PAGO',
+        paidDate: new Date().toISOString().split('T')[0],
+        paymentMethod: 'PIX',
+      });
     }
 
     setInvoices(prev => prev.map(inv => {
@@ -917,13 +639,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (studentIdToUpdate) {
       if (!isDemoMode && user) {
-        try {
-          await supabase.from('students').update({
-            payment_status: 'EM_DIA'
-          }).eq('id', studentIdToUpdate);
-        } catch (err) {
-          console.error(err);
-        }
+        await syncNeonData({
+          action: 'UPDATE_STUDENT',
+          studentId: studentIdToUpdate,
+          student: { paymentStatus: 'EM_DIA' },
+        });
       }
 
       setStudents(prev => prev.map(s => {
@@ -937,50 +657,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updatePersonalProfile = async (profileUpdates: Partial<PersonalProfile>) => {
     if (!isDemoMode && user) {
-      try {
-        let updateRes = await fetch('/api/app-data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            ...profileUpdates,
-          }),
-        }).catch(() => null);
-
-        if (!updateRes || updateRes.status === 404) {
-          updateRes = await fetch('/fitcoach/api/app-data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: user.id,
-              ...profileUpdates,
-            }),
-          }).catch(() => null);
-        }
-      } catch (neonErr) {
-        console.warn('Erro ao atualizar perfil no Neon:', neonErr);
-      }
-
-      try {
-        if (profileUpdates.name || profileUpdates.phone || profileUpdates.avatarUrl) {
-          await supabase.from('profiles').update({
-            ...(profileUpdates.name ? { name: profileUpdates.name } : {}),
-            ...(profileUpdates.phone ? { phone: profileUpdates.phone } : {}),
-            ...(profileUpdates.avatarUrl ? { avatar_url: profileUpdates.avatarUrl } : {}),
-          }).eq('id', user.id);
-        }
-
-        await supabase.from('personal_profiles').upsert({
-          id: user.id,
-          ...(profileUpdates.title ? { title: profileUpdates.title } : {}),
-          ...(profileUpdates.cref ? { cref: profileUpdates.cref } : {}),
-          ...(profileUpdates.bio ? { bio: profileUpdates.bio } : {}),
-          ...(profileUpdates.pixKey ? { pix_key: profileUpdates.pixKey } : {}),
-          ...(profileUpdates.pixType ? { pix_type: profileUpdates.pixType } : {}),
-        });
-      } catch (err) {
-        console.error('Erro ao atualizar perfil no Supabase:', err);
-      }
+      await syncNeonData({
+        userId: user.id,
+        ...profileUpdates,
+      });
     }
     setPersonal(prev => ({ ...prev, ...profileUpdates }));
   };
@@ -1004,21 +684,17 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       : content;
 
     if (!isDemoMode && user) {
-      try {
-        const { data } = await supabase.from('messages').insert({
-          personal_id: user.id,
-          student_id: studentId,
-          sender_role: senderRole,
-          sender_id: senderRole === 'PERSONAL' ? user.id : studentId,
-          sender_name: senderRole === 'PERSONAL' ? personal.name : (student?.name || 'Aluno'),
-          content: dbContent,
-          category: category || 'GERAL',
-          read: false,
-        }).select().single();
-        if (data) msgId = data.id;
-      } catch (err) {
-        console.error('Erro ao enviar mensagem:', err);
-      }
+      const res = await syncNeonData({
+        action: 'SEND_MESSAGE',
+        studentId,
+        personalId: user.id,
+        senderRole,
+        senderId: senderRole === 'PERSONAL' ? user.id : studentId,
+        senderName: senderRole === 'PERSONAL' ? personal.name : (student?.name || 'Aluno'),
+        content: dbContent,
+        category: category || 'GERAL',
+      });
+      if (res?.message?.id) msgId = res.message.id;
     }
 
     const newMsg: ChatMessage = {
@@ -1041,16 +717,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const senderRoleToMark = readerRole === 'PERSONAL' ? 'STUDENT' : 'PERSONAL';
 
     if (!isDemoMode && user) {
-      try {
-        await supabase
-          .from('messages')
-          .update({ read: true })
-          .eq('student_id', studentId)
-          .eq('personal_id', user.id)
-          .eq('sender_role', senderRoleToMark);
-      } catch (err) {
-        console.error('Erro ao marcar mensagens como lidas:', err);
-      }
+      await syncNeonData({
+        action: 'MARK_MESSAGES_READ',
+        studentId,
+        personalId: user.id,
+        senderRole: senderRoleToMark,
+      });
     }
 
     setMessages(prev => prev.map(msg => {

@@ -48,7 +48,7 @@ const RootRedirect: React.FC = () => {
   return <Navigate to="/login" replace />;
 };
 
-// Intercepta e normaliza redirecionamentos de autenticação do Supabase (recovery, tokens no hash)
+// Intercepta e normaliza redirecionamentos de autenticação (recovery, tokens no hash)
 if (typeof window !== 'undefined') {
   const hash = window.location.hash || '';
   const search = window.location.search || '';
