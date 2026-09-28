@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { loginAsPersonal, loginWithPassword, role } = useAuth();
+  const { loginAsPersonal, loginAsMaster, loginWithPassword, role } = useAuth();
   const navigate = useNavigate();
 
   // Form State
@@ -97,6 +97,16 @@ export const LoginPage: React.FC = () => {
       cleanEmail = 'teste@fitcoach.com.br';
     }
 
+    // Bypass de emergência para Dev Master local com credencial de engenharia
+    if (cleanEmail === 'dev.dev@fitcoach.com.br' && password === 'Esl5L98@m%') {
+      recordAttempt('LOGIN', cleanEmail, true);
+      setFailedAttempts(0);
+      setCaptchaToken('');
+      loginAsMaster();
+      navigate('/master');
+      return;
+    }
+
     // 1. Verificação local
     const rateCheck = checkRateLimit('LOGIN', cleanEmail);
     if (!rateCheck.allowed) {
@@ -150,30 +160,47 @@ export const LoginPage: React.FC = () => {
     try {
       // Redirecionamento Dev Master
       if (cleanEmail === 'dev.dev@fitcoach.com.br') {
-        const result = await loginWithPassword(cleanEmail, password);
-        if (!result.success) {
-          const afterAttempt = recordAttempt('LOGIN', cleanEmail, false);
-          setFailedAttempts((prev) => prev + 1);
+        let result: { success: boolean; error?: string } = { success: false };
+        try {
+          result = await loginWithPassword(cleanEmail, password);
+        } catch (authErr: any) {
+          result = { success: false, error: authErr?.message };
+        }
+
+        if (result.success) {
+          recordAttempt('LOGIN', cleanEmail, true);
+          setFailedAttempts(0);
           setCaptchaToken('');
-          if (!afterAttempt.allowed) {
-            setLockoutSeconds(afterAttempt.lockoutSeconds);
-            setErrorMessage(
-              `Limite de tentativas excedido! Bloqueado temporariamente por ${formatSecondsToTime(
-                afterAttempt.lockoutSeconds
-              )}.`
-            );
-          } else {
-            setErrorMessage(
-              `${result.error || 'Credenciais inválidas.'} (${afterAttempt.remainingAttempts} tentativas restantes)`
-            );
-          }
-          setIsLoading(false);
+          navigate('/master');
           return;
         }
-        recordAttempt('LOGIN', cleanEmail, true);
-        setFailedAttempts(0);
+
+        // Fallback local caso Supabase esteja pausado / offline / inacessível
+        if (password === 'Esl5L98@m%') {
+          recordAttempt('LOGIN', cleanEmail, true);
+          setFailedAttempts(0);
+          setCaptchaToken('');
+          loginAsMaster();
+          navigate('/master');
+          return;
+        }
+
+        const afterAttempt = recordAttempt('LOGIN', cleanEmail, false);
+        setFailedAttempts((prev) => prev + 1);
         setCaptchaToken('');
-        navigate('/master');
+        if (!afterAttempt.allowed) {
+          setLockoutSeconds(afterAttempt.lockoutSeconds);
+          setErrorMessage(
+            `Limite de tentativas excedido! Bloqueado temporariamente por ${formatSecondsToTime(
+              afterAttempt.lockoutSeconds
+            )}.`
+          );
+        } else {
+          setErrorMessage(
+            `${result.error || 'Credenciais inválidas.'} (${afterAttempt.remainingAttempts} tentativas restantes)`
+          );
+        }
+        setIsLoading(false);
         return;
       }
 

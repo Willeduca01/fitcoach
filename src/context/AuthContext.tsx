@@ -11,6 +11,7 @@ interface AuthContextType {
   loading: boolean;
   loginAsPersonal: () => void;
   loginAsStudent: (studentId: string) => void;
+  loginAsMaster: () => void;
   loginWithPassword: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
   signUpWithInviteCode: (params: {
     email: string;
@@ -32,7 +33,37 @@ const AUTH_STORAGE_KEY = 'fitcoach_auth_session';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(() => {
+    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.role === 'MASTER') {
+          return {
+            id: 'dev-master-id',
+            email: 'dev.dev@fitcoach.com.br',
+            app_metadata: {},
+            user_metadata: { name: 'Desenvolvedor Master', role: 'MASTER' },
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          } as unknown as SupabaseUser;
+        }
+        if (parsed.role === 'PERSONAL') {
+          return {
+            id: 'demo-personal-id',
+            email: 'teste@fitcoach.com.br',
+            app_metadata: {},
+            user_metadata: { name: 'Professor Demo', role: 'PERSONAL' },
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          } as unknown as SupabaseUser;
+        }
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [session, setSession] = useState<SupabaseSession | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,12 +108,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 1. Pega a sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
       if (session?.user) {
+        setUser(session.user);
         syncUserProfile(session.user.id);
       } else {
         setLoading(false);
       }
+    }).catch((err) => {
+      console.warn('[Supabase] Falha de conexão inicial (offline/pausado):', err);
+      setLoading(false);
     });
 
     // 2. Escuta mudanças de auth (login, logout, token refresh, password recovery)
@@ -268,11 +302,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginAsPersonal = () => {
     setRole('PERSONAL');
+    setUser({
+      id: 'demo-personal-id',
+      email: 'teste@fitcoach.com.br',
+      app_metadata: {},
+      user_metadata: { name: 'Professor Demo', role: 'PERSONAL' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as unknown as SupabaseUser);
   };
 
   const loginAsStudent = (studentId: string) => {
     setRole('STUDENT');
     setCurrentStudentId(studentId);
+    setUser({
+      id: studentId,
+      email: 'aluno.demo@fitcoach.com.br',
+      app_metadata: {},
+      user_metadata: { name: 'Aluno Demonstrativo', role: 'STUDENT' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as unknown as SupabaseUser);
+  };
+
+  const loginAsMaster = () => {
+    setRole('MASTER');
+    setUser({
+      id: 'dev-master-id',
+      email: 'dev.dev@fitcoach.com.br',
+      app_metadata: {},
+      user_metadata: { name: 'Desenvolvedor Master', role: 'MASTER' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as unknown as SupabaseUser);
   };
 
   const logout = async () => {
@@ -347,13 +409,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         loginAsPersonal,
         loginAsStudent,
+        loginAsMaster,
         loginWithPassword,
         signUpWithInviteCode,
         logout,
         switchRole,
         sendPasswordResetEmail,
         updatePassword,
-        isAuthenticated: !!session || !!user,
+        isAuthenticated: !!session || !!user || !!role,
         isPasswordRecovery,
       }}
     >

@@ -30,3 +30,4 @@ scripts/create_zip.ps1
 *.njsproj
 *.sln
 *.sw?
+.neon
