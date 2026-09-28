@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@21st-dev/cli": "^1.17.1",
-    "@rolldown/binding-win32-x64-msvc": "^1.2.8",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.13.3",
     "@types/nodemailer": "^8.0.2",
