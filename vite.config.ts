@@ -604,6 +604,154 @@ function emailServerPlugin(): Plugin {
           return;
         }
 
+        // Middleware de Dados do Usuário / CRM (Neon Postgres): /api/app-data
+        if (url === '/api/app-data' || url === '/fitcoach/api/app-data') {
+          if (req.method === 'GET') {
+            const rawUrl = req.url || '';
+            const queryParams = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
+            const rawUserId = queryParams.get('userId');
+            const rawEmail = queryParams.get('email');
+
+            const userId = rawUserId ? rawUserId.trim() : null;
+            const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
+
+            try {
+              if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+              const { neon } = await import('@neondatabase/serverless');
+              const sql = neon(databaseUrl);
+
+              const profileRows = await sql`
+                SELECT id, role, name, email, phone, avatar_url, created_at, updated_at
+                FROM public.profiles
+                WHERE (${userId ? sql`id = ${userId}::uuid` : sql`FALSE`}
+                   OR ${email ? sql`LOWER(email) = ${email}` : sql`FALSE`})
+                LIMIT 1;
+              `;
+
+              if (profileRows.length === 0) {
+                res.statusCode = 404;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Perfil não encontrado.' }));
+                return;
+              }
+
+              const profile = profileRows[0];
+              const effectiveId = profile.id;
+              const isStudent = profile.role === 'STUDENT';
+
+              let personalData = null;
+              if (!isStudent) {
+                const pRows = await sql`
+                  SELECT title, cref, bio, pix_key, pix_type
+                  FROM public.personal_profiles
+                  WHERE id = ${effectiveId}::uuid
+                  LIMIT 1;
+                `;
+                personalData = pRows[0] || null;
+              }
+
+              const studentsRows = isStudent
+                ? await sql`SELECT * FROM public.students WHERE user_id = ${effectiveId}::uuid OR LOWER(email) = ${profile.email} ORDER BY created_at DESC;`
+                : await sql`SELECT * FROM public.students WHERE personal_id = ${effectiveId}::uuid ORDER BY created_at DESC;`;
+
+              const sessionsRows = isStudent
+                ? await sql`SELECT * FROM public.sessions WHERE student_id IN (SELECT id FROM public.students WHERE user_id = ${effectiveId}::uuid) ORDER BY date DESC, time ASC;`
+                : await sql`SELECT * FROM public.sessions WHERE personal_id = ${effectiveId}::uuid ORDER BY date DESC, time ASC;`;
+
+              const invoicesRows = isStudent
+                ? await sql`SELECT * FROM public.invoices WHERE student_id IN (SELECT id FROM public.students WHERE user_id = ${effectiveId}::uuid) ORDER BY due_date DESC;`
+                : await sql`SELECT * FROM public.invoices WHERE personal_id = ${effectiveId}::uuid ORDER BY due_date DESC;`;
+
+              const workoutsRows = isStudent
+                ? await sql`SELECT * FROM public.workouts WHERE student_id IN (SELECT id FROM public.students WHERE user_id = ${effectiveId}::uuid);`
+                : await sql`SELECT * FROM public.workouts WHERE personal_id = ${effectiveId}::uuid;`;
+
+              const assessmentsRows = isStudent
+                ? await sql`SELECT * FROM public.physical_assessments WHERE student_id IN (SELECT id FROM public.students WHERE user_id = ${effectiveId}::uuid);`
+                : await sql`SELECT * FROM public.physical_assessments WHERE personal_id = ${effectiveId}::uuid;`;
+
+              const messagesRows = isStudent
+                ? await sql`SELECT * FROM public.messages WHERE student_id IN (SELECT id FROM public.students WHERE user_id = ${effectiveId}::uuid) ORDER BY created_at ASC;`
+                : await sql`SELECT * FROM public.messages WHERE personal_id = ${effectiveId}::uuid ORDER BY created_at ASC;`;
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: true,
+                profile,
+                personalProfile: personalData,
+                students: studentsRows,
+                sessions: sessionsRows,
+                invoices: invoicesRows,
+                workouts: workoutsRows,
+                assessments: assessmentsRows,
+                messages: messagesRows,
+              }));
+              return;
+            } catch (err: any) {
+              console.error('[vite:app-data GET] Erro ao carregar dados:', err);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message || 'Erro ao carregar dados do Neon.' }));
+              return;
+            }
+          }
+
+          if (req.method === 'POST') {
+            let bodyStr = '';
+            req.on('data', (chunk) => { bodyStr += chunk; });
+            req.on('end', async () => {
+              try {
+                const body = JSON.parse(bodyStr || '{}');
+                const { userId, name, phone, avatarUrl, title, cref, bio, pixKey, pixType } = body;
+                if (!userId) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'userId obrigatório.' }));
+                  return;
+                }
+
+                if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+                const { neon } = await import('@neondatabase/serverless');
+                const sql = neon(databaseUrl);
+
+                if (name || phone || avatarUrl) {
+                  await sql`
+                    UPDATE public.profiles
+                    SET name = COALESCE(${name || null}, name),
+                        phone = COALESCE(${phone || null}, phone),
+                        avatar_url = COALESCE(${avatarUrl || null}, avatar_url),
+                        updated_at = NOW()
+                    WHERE id = ${userId}::uuid;
+                  `;
+                }
+
+                await sql`
+                  INSERT INTO public.personal_profiles (id, title, cref, bio, pix_key, pix_type, updated_at)
+                  VALUES (${userId}::uuid, ${title || 'Personal Trainer & Consultor'}, ${cref || null}, ${bio || null}, ${pixKey || null}, ${pixType || 'EMAIL'}, NOW())
+                  ON CONFLICT (id) DO UPDATE
+                  SET title = COALESCE(EXCLUDED.title, public.personal_profiles.title),
+                      cref = COALESCE(EXCLUDED.cref, public.personal_profiles.cref),
+                      bio = COALESCE(EXCLUDED.bio, public.personal_profiles.bio),
+                      pix_key = COALESCE(EXCLUDED.pix_key, public.personal_profiles.pix_key),
+                      pix_type = COALESCE(EXCLUDED.pix_type, public.personal_profiles.pix_type),
+                      updated_at = NOW();
+                `;
+
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true }));
+              } catch (err: any) {
+                console.error('[vite:app-data POST] Erro ao atualizar:', err);
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: err.message || 'Erro ao atualizar dados.' }));
+              }
+            });
+            return;
+          }
+        }
+
         // In-memory store para simular rate limiting com chaves compostas em ambiente local
         const devRateLimitStore = new Map<string, { attempts: number[]; lockedUntil: number | null }>();
 

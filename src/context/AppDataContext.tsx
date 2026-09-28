@@ -8,7 +8,10 @@ import {
   MeasurementRecord,
   SessionStatus,
   ChatMessage,
-  ChatMedia
+  ChatMedia,
+  StudentStatus,
+  PlanType,
+  PaymentStatus
 } from '../types';
 import {
   INITIAL_PERSONAL_PROFILE,
@@ -58,10 +61,17 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { user } = useAuth();
 
   // Verifica se o usuário atual é o perfil demonstrativo
-  const isDemoMode =
+  const isDemoMode = Boolean(
     !user ||
     user.email === 'teste@fitcoach.com.br' ||
-    localStorage.getItem('fitcoach_demo_mode') === 'true';
+    user.email === 'demo@fitcoach.com.br'
+  );
+
+  useEffect(() => {
+    if (user && user.email !== 'teste@fitcoach.com.br' && user.email !== 'demo@fitcoach.com.br') {
+      localStorage.removeItem('fitcoach_demo_mode');
+    }
+  }, [user]);
 
   const [isLoadingData, setIsLoadingData] = useState<boolean>(!isDemoMode);
 
@@ -70,11 +80,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const saved = localStorage.getItem(STORAGE_KEY + '_personal');
       return saved ? JSON.parse(saved) : INITIAL_PERSONAL_PROFILE;
     }
+    const savedAuth = typeof localStorage !== 'undefined' ? localStorage.getItem('fitcoach_auth_session') : null;
+    let realName = user?.user_metadata?.name;
+    let realEmail = user?.email;
+    if (!realName && savedAuth) {
+      try {
+        const parsed = JSON.parse(savedAuth);
+        if (parsed.user?.name) realName = parsed.user.name;
+        if (parsed.user?.email) realEmail = parsed.user.email;
+      } catch {}
+    }
     return {
       id: user?.id || 'personal-temp',
-      name: user?.user_metadata?.name || 'Personal Trainer',
-      title: 'Personal Trainer & Consultor Fitness',
-      email: user?.email || '',
+      name: realName || 'Personal Trainer',
+      title: 'Personal Trainer & Consultor',
+      email: realEmail || '',
       phone: user?.user_metadata?.phone || '',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
       pixKey: '',
@@ -116,13 +136,125 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return [];
   });
 
-  // Carregar dados reais do Supabase quando o usuário for um treinador real autenticado
-  // Carregar dados reais do Supabase quando o usuário for autenticado
+  // Carregar dados reais do Neon Postgres quando o usuário for autenticado
   const loadRealUserData = useCallback(async (userId: string) => {
     try {
       setIsLoadingData(true);
 
-      // 1. Perfil do Usuário
+      // 1. Tenta carregar dados consolidados do Neon Postgres
+      try {
+        let apiRes = await fetch(`/api/app-data?userId=${encodeURIComponent(userId)}&email=${encodeURIComponent(user?.email || '')}`).catch(() => null);
+        if (!apiRes || apiRes.status === 404) {
+          apiRes = await fetch(`/fitcoach/api/app-data?userId=${encodeURIComponent(userId)}&email=${encodeURIComponent(user?.email || '')}`).catch(() => null);
+        }
+
+        if (apiRes && apiRes.ok) {
+          const data = await apiRes.json();
+          const profile = data.profile;
+          const personalProfile = data.personalProfile;
+
+          if (profile) {
+            setPersonal({
+              id: profile.id,
+              name: profile.name || user?.user_metadata?.name || 'Personal Trainer',
+              title: personalProfile?.title || 'Personal Trainer & Consultor',
+              email: profile.email || user?.email || '',
+              phone: profile.phone || '',
+              avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+              pixKey: personalProfile?.pix_key || '',
+              pixType: (personalProfile?.pix_type as any) || 'EMAIL',
+              cref: personalProfile?.cref || 'Não informado',
+              bio: personalProfile?.bio || '',
+            });
+          }
+
+          const mappedStudents: Student[] = (data.students || []).map((s: any) => ({
+            id: s.id,
+            userId: s.user_id,
+            name: s.name,
+            email: s.email,
+            phone: s.phone || '',
+            avatarUrl: s.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+            status: s.status as StudentStatus,
+            plan: s.plan as PlanType,
+            monthlyFee: Number(s.monthly_fee) || 250,
+            dueDay: s.due_day || 10,
+            paymentStatus: s.payment_status as PaymentStatus,
+            startDate: s.start_date || new Date().toISOString().split('T')[0],
+            primaryGoal: s.primary_goal || 'Hipertrofia & Força',
+            streakDays: s.streak_days || 0,
+            notes: s.notes || '',
+            workouts: [],
+            measurements: [],
+          }));
+          setStudents(mappedStudents);
+
+          const mappedSessions: SessionSchedule[] = (data.sessions || []).map((sess: any) => {
+            const student = (mappedStudents || []).find((s) => s.id === sess.student_id);
+            return {
+              id: sess.id,
+              studentId: sess.student_id,
+              studentName: student?.name || 'Aluno',
+              date: sess.date,
+              time: sess.time,
+              durationMinutes: sess.duration_minutes || 60,
+              location: sess.location || 'SmartFit',
+              status: sess.status,
+              workoutRoutineId: sess.workout_routine_id,
+              routineName: sess.routine_name,
+            };
+          });
+          setSessions(mappedSessions);
+
+          const mappedInvoices: Invoice[] = (data.invoices || []).map((inv: any) => {
+            const student = (mappedStudents || []).find((s) => s.id === inv.student_id);
+            return {
+              id: inv.id,
+              studentId: inv.student_id,
+              studentName: student?.name || 'Aluno',
+              amount: Number(inv.amount) || 0,
+              dueDate: inv.due_date,
+              paidDate: inv.paid_date,
+              status: inv.status,
+              paymentMethod: inv.payment_method,
+            };
+          });
+          setInvoices(mappedInvoices);
+
+          const mappedMessages: ChatMessage[] = (data.messages || []).map((m: any) => {
+            let parsedContent = m.content;
+            let parsedMedia: ChatMedia | undefined = undefined;
+            if (typeof m.content === 'string' && m.content.startsWith('__FC_MEDIA__')) {
+              try {
+                const parsed = JSON.parse(m.content.substring(12));
+                parsedContent = parsed.text || '';
+                parsedMedia = parsed.media;
+              } catch (e) {
+                parsedContent = m.content;
+              }
+            }
+            return {
+              id: m.id,
+              senderRole: m.sender_role,
+              senderId: m.sender_id,
+              senderName: m.sender_name,
+              studentId: m.student_id,
+              content: parsedContent,
+              media: parsedMedia,
+              timestamp: new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              read: m.read,
+              category: m.category,
+            };
+          });
+          setMessages(mappedMessages);
+          setIsLoadingData(false);
+          return;
+        }
+      } catch (neonErr) {
+        console.warn('[AppDataContext] Erro ao carregar do Neon via /api/app-data:', neonErr);
+      }
+
+      // 2. Fallback legado Supabase
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -805,6 +937,30 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updatePersonalProfile = async (profileUpdates: Partial<PersonalProfile>) => {
     if (!isDemoMode && user) {
+      try {
+        let updateRes = await fetch('/api/app-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            ...profileUpdates,
+          }),
+        }).catch(() => null);
+
+        if (!updateRes || updateRes.status === 404) {
+          updateRes = await fetch('/fitcoach/api/app-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user.id,
+              ...profileUpdates,
+            }),
+          }).catch(() => null);
+        }
+      } catch (neonErr) {
+        console.warn('Erro ao atualizar perfil no Neon:', neonErr);
+      }
+
       try {
         if (profileUpdates.name || profileUpdates.phone || profileUpdates.avatarUrl) {
           await supabase.from('profiles').update({
