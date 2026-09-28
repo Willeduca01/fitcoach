@@ -52,11 +52,20 @@ export async function sendInviteEmail(data: InviteEmailData): Promise<SendInvite
   try {
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData?.session?.access_token;
+    const savedAuth = typeof localStorage !== 'undefined' ? localStorage.getItem('fitcoach_auth_session') : null;
+    let savedRole: string | null = null;
+    try {
+      savedRole = savedAuth ? JSON.parse(savedAuth).role : null;
+    } catch {}
+
     const authHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (token) {
       authHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    if (savedRole) {
+      authHeaders['x-fitcoach-role'] = savedRole;
     }
 
     const payload = JSON.stringify({

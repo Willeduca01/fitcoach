@@ -13,6 +13,7 @@ function emailServerPlugin(): Plugin {
   const gmailPass = env.GMAIL_APP_PASSWORD || process.env.GMAIL_APP_PASSWORD;
   const supabaseUrl = env.VITE_SUPABASE_URL || 'https://xmpbzpdggsonzftueynw.supabase.co';
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 
   return {
     name: 'fitcoach-email-server',
@@ -237,6 +238,280 @@ function emailServerPlugin(): Plugin {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: err.message || 'Erro ao vincular aluno.' }));
+            }
+          });
+          return;
+        }
+
+        // Middleware de Convites (Neon Postgres): GET (validação) e POST (criação)
+        if (url === '/api/invites' || url === '/fitcoach/api/invites') {
+          if (req.method === 'GET') {
+            const rawUrl = req.url || '';
+            const queryParams = new URLSearchParams(rawUrl.includes('?') ? rawUrl.split('?')[1] : '');
+            const rawCode = queryParams.get('code') || '';
+            const cleanCode = rawCode.trim().toUpperCase();
+
+            if (!cleanCode) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ valid: false, error: 'Código de convite ausente.' }));
+              return;
+            }
+
+            if (cleanCode === 'PROF-MESTRE-2026') {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                valid: true,
+                inviteType: 'PERSONAL',
+                targetName: 'Professor Mestre',
+                personalName: 'Administrador / Desenvolvedor',
+              }));
+              return;
+            }
+
+            try {
+              if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+              const { neon } = await import('@neondatabase/serverless');
+              const sql = neon(databaseUrl);
+              const rows = await sql`
+                SELECT i.id, i.code, i.type, i.target_name, i.target_email, i.plan, i.status, i.personal_id, i.expires_at, p.name as personal_name
+                FROM public.invites i
+                LEFT JOIN public.profiles p ON i.personal_id = p.id
+                WHERE UPPER(i.code) = ${cleanCode}
+                LIMIT 1;
+              `;
+
+              if (rows.length === 0) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ valid: false, error: 'Código de convite não encontrado.' }));
+                return;
+              }
+
+              const inv = rows[0];
+              if (inv.status !== 'PENDENTE') {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ valid: false, error: `Este convite já foi utilizado ou está ${inv.status.toLowerCase()}.` }));
+                return;
+              }
+
+              if (inv.expires_at && new Date(inv.expires_at) < new Date()) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ valid: false, error: 'Este código de convite expirou.' }));
+                return;
+              }
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                valid: true,
+                inviteType: inv.type,
+                targetName: inv.target_name,
+                targetEmail: inv.target_email,
+                plan: inv.plan,
+                personalId: inv.personal_id,
+                personalName: inv.personal_name || 'Administrador / Desenvolvedor',
+              }));
+              return;
+            } catch (err: any) {
+              console.error('[vite:invites GET] Erro ao validar convite:', err);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ valid: false, error: 'Erro ao validar convite no banco de dados Neon.' }));
+              return;
+            }
+          }
+
+          if (req.method === 'POST') {
+            let bodyStr = '';
+            req.on('data', (chunk) => { bodyStr += chunk; });
+            req.on('end', async () => {
+              try {
+                const body = JSON.parse(bodyStr || '{}');
+                const { type = 'PERSONAL', targetName, targetEmail, plan = 'ANUAL', personalId } = body;
+                if (!targetName) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'targetName é obrigatório.' }));
+                  return;
+                }
+
+                if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+                const { neon } = await import('@neondatabase/serverless');
+                const sql = neon(databaseUrl);
+
+                const prefix = type === 'STUDENT' ? 'ALUNO' : 'PROF';
+                const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+                const code = `${prefix}-${randomSuffix}`;
+                const cleanName = String(targetName).trim();
+                const cleanEmail = targetEmail ? String(targetEmail).trim().toLowerCase() : null;
+
+                const rows = await sql`
+                  INSERT INTO public.invites (code, type, target_name, target_email, plan, personal_id, status, created_at, expires_at)
+                  VALUES (${code}, ${type}, ${cleanName}, ${cleanEmail}, ${plan}, ${personalId || null}::uuid, 'PENDENTE', NOW(), NOW() + INTERVAL '14 days')
+                  RETURNING *;
+                `;
+
+                const created = rows[0];
+                res.statusCode = 201;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  success: true,
+                  invite: {
+                    id: created.id,
+                    code: created.code,
+                    type: created.type,
+                    targetName: created.target_name,
+                    target_name: created.target_name,
+                    targetEmail: created.target_email,
+                    target_email: created.target_email,
+                    plan: created.plan,
+                    status: created.status,
+                    createdAt: created.created_at,
+                    created_at: created.created_at,
+                  },
+                }));
+              } catch (err: any) {
+                console.error('[vite:invites POST] Erro ao criar convite:', err);
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: err.message || 'Erro ao criar convite.' }));
+              }
+            });
+            return;
+          }
+        }
+
+        // Middleware de Cadastro com Convite (Neon Postgres): POST /api/register
+        if (req.method === 'POST' && (url === '/api/register' || url === '/fitcoach/api/register')) {
+          let bodyStr = '';
+          req.on('data', (chunk) => { bodyStr += chunk; });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              const { name, email, phone, password, inviteCode } = body;
+
+              if (!name || !email || !password || !inviteCode) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Nome, e-mail, senha e código de convite são obrigatórios.' }));
+                return;
+              }
+
+              if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+              const { neon } = await import('@neondatabase/serverless');
+              const sql = neon(databaseUrl);
+
+              const cleanEmail = String(email).trim().toLowerCase();
+              const cleanName = String(name).trim();
+              const cleanPhone = phone ? String(phone).trim() : null;
+              const cleanCode = String(inviteCode).trim().toUpperCase();
+
+              // 1. Validação estrita do convite
+              const inviteRows = await sql`
+                SELECT * FROM public.invites
+                WHERE UPPER(code) = ${cleanCode}
+                  AND status = 'PENDENTE'
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                LIMIT 1;
+              `;
+
+              const isMasterCode = cleanCode === 'PROF-MESTRE-2026';
+              let targetType = 'PERSONAL';
+              let personalId: string | null = null;
+              let inviteId: string | null = null;
+
+              if (inviteRows.length > 0) {
+                const inv = inviteRows[0];
+                targetType = inv.type;
+                personalId = inv.personal_id;
+                inviteId = inv.id;
+              } else if (!isMasterCode) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Código de convite inválido, expirado ou já resgatado.' }));
+                return;
+              }
+
+              // 2. Insere/atualiza profiles
+              const profileRows = await sql`
+                INSERT INTO public.profiles (role, name, email, phone, updated_at)
+                VALUES (${targetType}, ${cleanName}, ${cleanEmail}, ${cleanPhone}, NOW())
+                ON CONFLICT (email) DO UPDATE
+                SET role = EXCLUDED.role,
+                    name = EXCLUDED.name,
+                    phone = COALESCE(EXCLUDED.phone, public.profiles.phone),
+                    updated_at = NOW()
+                RETURNING id, role, name, email;
+              `;
+
+              const userProfile = profileRows[0];
+
+              // Sincroniza em auth.users
+              try {
+                await sql`
+                  INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, updated_at)
+                  VALUES (
+                    ${userProfile.id}::uuid,
+                    ${cleanEmail},
+                    json_build_object('name', ${cleanName}, 'phone', ${cleanPhone}, 'role', ${targetType}),
+                    NOW(),
+                    NOW()
+                  )
+                  ON CONFLICT (email) DO UPDATE
+                  SET raw_user_meta_data = EXCLUDED.raw_user_meta_data,
+                      updated_at = NOW();
+                `;
+              } catch (authErr) {
+                console.warn('[vite:register] Aviso auth.users:', authErr);
+              }
+
+              // 3. Se for PERSONAL, cria personal_profiles
+              if (targetType === 'PERSONAL') {
+                await sql`
+                  INSERT INTO public.personal_profiles (id, title, cref)
+                  VALUES (${userProfile.id}::uuid, 'Personal Trainer & Consultor', 'CREF Verificado')
+                  ON CONFLICT (id) DO NOTHING;
+                `;
+              }
+
+              // 4. Se for STUDENT, vincula a students
+              if (targetType === 'STUDENT' && personalId) {
+                await sql`
+                  INSERT INTO public.students (personal_id, user_id, name, email, phone, status, plan, start_date)
+                  VALUES (${personalId}::uuid, ${userProfile.id}::uuid, ${cleanName}, ${cleanEmail}, ${cleanPhone}, 'ATIVO', 'MENSAL', CURRENT_DATE)
+                  ON CONFLICT (id) DO NOTHING;
+                `;
+              }
+
+              // 5. Marca convite como USADO
+              if (inviteId) {
+                await sql`
+                  UPDATE public.invites
+                  SET status = 'USADO', used_by = ${userProfile.id}::uuid, used_at = NOW()
+                  WHERE id = ${inviteId}::uuid;
+                `;
+              }
+
+              res.statusCode = 201;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: true,
+                user: {
+                  id: userProfile.id,
+                  role: userProfile.role,
+                  name: userProfile.name,
+                  email: userProfile.email,
+                },
+              }));
+            } catch (err: any) {
+              console.error('[vite:register] Erro no registro:', err);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message || 'Erro no processo de cadastro.' }));
             }
           });
           return;

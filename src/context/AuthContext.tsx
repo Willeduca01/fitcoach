@@ -272,6 +272,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'Código de convite inválido ou expirado.' };
       }
 
+      // 1. Tenta registrar no Neon Postgres via /api/register
+      try {
+        let apiRes = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: params.name.trim(),
+            email: params.email.trim(),
+            phone: params.phone?.trim() || '',
+            password: params.password,
+            inviteCode: params.inviteCode.trim().toUpperCase(),
+          }),
+        }).catch(() => null);
+
+        if (!apiRes || apiRes.status === 404) {
+          apiRes = await fetch('/fitcoach/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: params.name.trim(),
+              email: params.email.trim(),
+              phone: params.phone?.trim() || '',
+              password: params.password,
+              inviteCode: params.inviteCode.trim().toUpperCase(),
+            }),
+          }).catch(() => null);
+        }
+
+        if (apiRes && apiRes.ok) {
+          const regData = await apiRes.json();
+          const registeredUser = regData.user;
+          const userRole = (registeredUser?.role as UserRole) || (validation.inviteType === 'STUDENT' ? 'STUDENT' : 'PERSONAL');
+
+          const localUser = {
+            id: registeredUser.id,
+            email: registeredUser.email,
+            app_metadata: {},
+            user_metadata: { name: registeredUser.name, role: userRole },
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          } as unknown as SupabaseUser;
+
+          setUser(localUser);
+          setRole(userRole);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ role: userRole, currentStudentId: null }));
+
+          // Silenciosamente tenta no Supabase em background se ainda estiver online
+          supabase.auth.signUp({
+            email: params.email.trim(),
+            password: params.password,
+            options: {
+              data: {
+                name: params.name.trim(),
+                phone: params.phone?.trim() || '',
+                invite_code: params.inviteCode.trim().toUpperCase(),
+              },
+            },
+          }).catch(() => {});
+
+          setLoading(false);
+          return { success: true };
+        } else if (apiRes && !apiRes.ok) {
+          const errJson = await apiRes.json().catch(() => null);
+          if (errJson?.error) {
+            setLoading(false);
+            return { success: false, error: errJson.error };
+          }
+        }
+      } catch (neonErr) {
+        console.warn('[signUpWithInviteCode] Erro na API /api/register:', neonErr);
+      }
+
+      // 2. Fallback Supabase
       const { data, error } = await supabase.auth.signUp({
         email: params.email.trim(),
         password: params.password,

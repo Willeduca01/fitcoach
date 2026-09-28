@@ -19,6 +19,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+async function apiFetch(endpoint: string, options?: RequestInit) {
+  let res = await fetch(endpoint, options).catch(() => null);
+  if (!res || res.status === 404) {
+    res = await fetch(`/fitcoach${endpoint}`, options).catch(() => null);
+  }
+  return res;
+}
+
 /**
  * Valida se um código de convite existe, está pendente e dentro da validade.
  */
@@ -28,8 +36,29 @@ export async function validateInviteCode(code: string): Promise<InviteValidation
     return { valid: false };
   }
 
+  // 1. Consulta a API Serverless conectada ao Neon Postgres
   try {
-    // 1. Tenta chamar a RPC validate_invite
+    const res = await apiFetch(`/api/invites?code=${encodeURIComponent(cleanCode)}`);
+    if (res && res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn('[validateInviteCode] Erro ao consultar /api/invites no Neon:', err);
+  }
+
+  // Código mestre de demonstração caso esteja rodando offline/sem banco
+  if (cleanCode === 'PROF-MESTRE-2026') {
+    return {
+      valid: true,
+      inviteType: 'PERSONAL',
+      targetName: 'Professor Mestre',
+      personalName: 'Administrador / Desenvolvedor',
+    };
+  }
+
+  try {
+    // 2. Tenta chamar a RPC validate_invite no Supabase se ainda disponível
     const { data, error } = await supabase.rpc('validate_invite', {
       invite_code: cleanCode,
     });
@@ -47,7 +76,7 @@ export async function validateInviteCode(code: string): Promise<InviteValidation
       };
     }
 
-    // 2. Fallback direto consultando a tabela public.invites caso a RPC ainda não esteja ativa
+    // 3. Fallback direto consultando a tabela public.invites caso a RPC ainda não esteja ativa
     const { data: inviteData, error: tableError } = await supabase
       .from('invites')
       .select('*, personal:profiles!personal_id(name)')
@@ -64,16 +93,6 @@ export async function validateInviteCode(code: string): Promise<InviteValidation
         plan: inviteData.plan,
         personalId: inviteData.personal_id,
         personalName: inviteData.personal?.name || 'Personal Trainer',
-      };
-    }
-
-    // Código mestre de demonstração caso esteja rodando sem banco populado ainda
-    if (cleanCode === 'PROF-MESTRE-2026') {
-      return {
-        valid: true,
-        inviteType: 'PERSONAL',
-        targetName: 'Professor Mestre',
-        personalName: 'Administrador / Desenvolvedor',
       };
     }
 
@@ -96,7 +115,28 @@ export async function signUpWithInvite(params: {
 }) {
   const { email, password, name, phone, inviteCode } = params;
 
-  // Envia os metadados para que o trigger no PostgreSQL faça a validação estrita
+  // 1. Tenta cadastrar no Neon Postgres via /api/register
+  try {
+    const res = await apiFetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        name,
+        phone,
+        inviteCode,
+      }),
+    });
+    if (res && res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn('[signUpWithInvite] Erro ao cadastrar via /api/register:', err);
+  }
+
+  // 2. Envia os metadados para que o trigger no PostgreSQL faça a validação estrita no Supabase
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -125,6 +165,30 @@ export async function createStudentInvite(params: {
   targetEmail?: string;
   plan?: string;
 }): Promise<Invite> {
+  // 1. Tenta gravar no Neon Postgres via API Serverless
+  try {
+    const res = await apiFetch('/api/invites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'STUDENT',
+        targetName: params.targetName,
+        targetEmail: params.targetEmail,
+        plan: params.plan || 'MENSAL',
+        personalId: params.personalId,
+      }),
+    });
+    if (res && res.ok) {
+      const json = await res.json();
+      if (json.invite) {
+        return json.invite as Invite;
+      }
+    }
+  } catch (err) {
+    console.warn('[createStudentInvite] Erro ao chamar /api/invites:', err);
+  }
+
+  // 2. Fallback Supabase
   const { data: authData } = await supabase.auth.getUser();
   const effectivePersonalId = authData?.user?.id || params.personalId;
 
@@ -160,6 +224,29 @@ export async function createPersonalInvite(params: {
   targetName: string;
   targetEmail?: string;
 }): Promise<Invite> {
+  // 1. Tenta gravar no Neon Postgres via API Serverless
+  try {
+    const res = await apiFetch('/api/invites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'PERSONAL',
+        targetName: params.targetName,
+        targetEmail: params.targetEmail,
+        plan: 'ANUAL',
+      }),
+    });
+    if (res && res.ok) {
+      const json = await res.json();
+      if (json.invite) {
+        return json.invite as Invite;
+      }
+    }
+  } catch (err) {
+    console.warn('[createPersonalInvite] Erro ao chamar /api/invites:', err);
+  }
+
+  // 2. Fallback Supabase
   const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
   const code = `PROF-${randomSuffix}`;
 
