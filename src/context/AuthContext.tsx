@@ -38,6 +38,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (parsed.user) {
+          return {
+            id: parsed.user.id,
+            email: parsed.user.email,
+            app_metadata: {},
+            user_metadata: { name: parsed.user.name, role: parsed.role },
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          } as unknown as SupabaseUser;
+        }
         if (parsed.role === 'MASTER') {
           return {
             id: 'dev-master-id',
@@ -230,10 +240,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [role, currentStudentId]);
 
-  // Login com E-mail e Senha oficial do Supabase
+  // Login com E-mail e Senha conectado ao Neon Postgres
   const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; role?: UserRole; error?: string }> => {
     try {
       setLoading(true);
+
+      // 1. Autenticação prioritária via Neon Postgres
+      try {
+        const cleanEmail = email.trim().toLowerCase();
+        let loginRes = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
+        }).catch(() => null);
+
+        if (!loginRes || loginRes.status === 404) {
+          loginRes = await fetch('/fitcoach/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail, password }),
+          }).catch(() => null);
+        }
+
+        if (loginRes) {
+          const json = await loginRes.json().catch(() => null);
+          if (loginRes.ok && json?.success && json?.user) {
+            const userRole = json.role as UserRole;
+            const studentId = json.studentId || null;
+
+            const localUser = {
+              id: json.user.id,
+              email: json.user.email,
+              app_metadata: {},
+              user_metadata: { name: json.user.name, role: userRole },
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+            } as unknown as SupabaseUser;
+
+            setUser(localUser);
+            setRole(userRole);
+            if (studentId) setCurrentStudentId(studentId);
+            localStorage.setItem(
+              AUTH_STORAGE_KEY,
+              JSON.stringify({ role: userRole, currentStudentId: studentId, user: json.user })
+            );
+            setLoading(false);
+            return { success: true, role: userRole };
+          } else if (!loginRes.ok && json?.error) {
+            setLoading(false);
+            return { success: false, error: json.error };
+          }
+        }
+      } catch (neonErr) {
+        console.warn('[loginWithPassword] Erro na API Neon /api/login:', neonErr);
+      }
+
+      // 2. Fallback Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,

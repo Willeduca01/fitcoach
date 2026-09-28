@@ -72,18 +72,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 2. Insere ou atualiza o perfil em public.profiles
     const profileRows = await sql`
-      INSERT INTO public.profiles (role, name, email, phone, updated_at)
+      INSERT INTO public.profiles (role, name, email, phone, password_hash, updated_at)
       VALUES (
         ${targetType},
         ${cleanName},
         ${cleanEmail},
         ${cleanPhone},
+        crypt(${password}, gen_salt('bf')),
         NOW()
       )
       ON CONFLICT (email) DO UPDATE
       SET role = EXCLUDED.role,
           name = EXCLUDED.name,
           phone = COALESCE(EXCLUDED.phone, public.profiles.phone),
+          password_hash = crypt(${password}, gen_salt('bf')),
           updated_at = NOW()
       RETURNING id, role, name, email;
     `;

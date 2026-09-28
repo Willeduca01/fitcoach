@@ -517,6 +517,93 @@ function emailServerPlugin(): Plugin {
           return;
         }
 
+        // Middleware de Login (Neon Postgres): POST /api/login
+        if (req.method === 'POST' && (url === '/api/login' || url === '/fitcoach/api/login')) {
+          let bodyStr = '';
+          req.on('data', (chunk) => { bodyStr += chunk; });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(bodyStr || '{}');
+              const { email, password } = body;
+              if (!email || !password) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'E-mail e senha são obrigatórios.' }));
+                return;
+              }
+
+              if (!databaseUrl) throw new Error('DATABASE_URL ausente');
+              const { neon } = await import('@neondatabase/serverless');
+              const sql = neon(databaseUrl);
+
+              const cleanEmail = String(email).trim().toLowerCase();
+              const rawPassword = String(password);
+
+              const rows = await sql`
+                SELECT id, role, name, email, phone, avatar_url, password_hash,
+                       (password_hash IS NOT NULL AND password_hash = crypt(${rawPassword}, password_hash)) as is_valid
+                FROM public.profiles
+                WHERE LOWER(email) = ${cleanEmail}
+                LIMIT 1;
+              `;
+
+              if (rows.length === 0) {
+                res.statusCode = 401;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Nenhuma conta encontrada com este e-mail. Solicite um convite de acesso.' }));
+                return;
+              }
+
+              const user = rows[0];
+              if (!user.password_hash) {
+                await sql`
+                  UPDATE public.profiles
+                  SET password_hash = crypt(${rawPassword}, gen_salt('bf')),
+                      updated_at = NOW()
+                  WHERE id = ${user.id}::uuid;
+                `;
+              } else if (!user.is_valid) {
+                res.statusCode = 401;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Senha incorreta. Verifique os dados digitados ou redefina sua senha.' }));
+                return;
+              }
+
+              let studentId = null;
+              if (user.role === 'STUDENT') {
+                const sRows = await sql`
+                  SELECT id FROM public.students
+                  WHERE user_id = ${user.id}::uuid OR LOWER(email) = ${cleanEmail}
+                  LIMIT 1;
+                `;
+                if (sRows.length > 0) studentId = sRows[0].id;
+              }
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: true,
+                role: user.role,
+                studentId,
+                user: {
+                  id: user.id,
+                  role: user.role,
+                  name: user.name,
+                  email: user.email,
+                  phone: user.phone,
+                  avatarUrl: user.avatar_url,
+                }
+              }));
+            } catch (err: any) {
+              console.error('[vite:login] Erro no login:', err);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message || 'Erro na autenticação.' }));
+            }
+          });
+          return;
+        }
+
         // In-memory store para simular rate limiting com chaves compostas em ambiente local
         const devRateLimitStore = new Map<string, { attempts: number[]; lockedUntil: number | null }>();
 
